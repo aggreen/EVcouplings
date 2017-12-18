@@ -3,11 +3,12 @@ Functions for writing concatenated sequence alignments
 
 Authors:
   Anna G. Green
+  Thomas A. Hopf
 """
 from collections import OrderedDict
 import numpy as np
 from evcouplings.align import Alignment, write_fasta, parse_header
-
+from evcouplings.couplings.mapping import Segment
 
 def write_concatenated_alignment(id_pairing, alignment_1, alignment_2,
                                  target_sequence_1, target_sequence_2):
@@ -119,9 +120,9 @@ def write_concatenated_alignment(id_pairing, alignment_1, alignment_2,
         )
 
     # concatenate strings
-    sequences_full = OrderedDict({
-        header: np.concatenate([seq1, seq2]) for header, seq1, seq2 in sequences_to_write
-    })
+    sequences_full = OrderedDict([
+        (header, np.concatenate([seq1, seq2])) for header, seq1, seq2 in sequences_to_write
+    ])
 
     sequences_monomer_1 = OrderedDict({
         header: seq1 for header, seq1, seq2 in sequences_to_write
@@ -136,3 +137,43 @@ def write_concatenated_alignment(id_pairing, alignment_1, alignment_2,
     monomer_ali_2 = Alignment.from_dict(sequences_monomer_2)
 
     return target_header, target_seq_idx, full_ali, monomer_ali_1, monomer_ali_2
+
+
+
+def modify_complex_segments(outcfg, **kwargs):
+    """
+    Modifies the output configuration so
+    that the segments are correct for a
+    concatenated alignment
+
+    Parameters
+    ----------
+    outcfg : dict
+        The output configuration
+
+    Returns
+    -------
+    outcfg: dict
+        The output configuration, with
+        a new field called "segments"
+
+    """
+    def _modify_segments(seg_list, seg_prefix):
+        # extract segments from list representation into objects
+        segs = [
+            Segment.from_list(s) for s in seg_list
+        ]
+        # update segment IDs
+        for i, s in enumerate(segs, start=1):
+            s.segment_id = "{}_{}".format(seg_prefix, i)
+
+        return segs
+
+    # merge segments - this allows to have more than one segment per
+    # "monomer" alignment
+    segments_1 = _modify_segments(kwargs["first_segments"], "A")
+    segments_2 = _modify_segments(kwargs["second_segments"], "B")
+    segments_complex = segments_1 + segments_2
+    outcfg["segments"] = [s.to_list() for s in segments_complex]
+
+    return outcfg

@@ -12,8 +12,6 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 
-from evcouplings.couplings.mapping import Segment
-
 from evcouplings.utils.config import (
     check_required, InvalidParameterError
 )
@@ -23,7 +21,7 @@ from evcouplings.utils.system import (
 from evcouplings.align.protocol import modify_alignment
 
 from evcouplings.complex.alignment import (
-    write_concatenated_alignment
+    write_concatenated_alignment, modify_complex_segments
 )
 from evcouplings.complex.distance import (
     find_possible_partners, best_reciprocal_matching,
@@ -36,43 +34,8 @@ from evcouplings.complex.similarity import (
     find_paralogs
 )
 
-def modify_complex_segments(outcfg, **kwargs):
-    """
-    Modifies the output configuration so
-    that the segments are correct for a
-    concatenated alignment
+from evcouplings.complex.energy import best_pairing
 
-    Parameters
-    ----------
-    outcfg : dict
-        The output configuration
-
-    Returns
-    -------
-    outcfg: dict
-        The output configuration, with
-        a new field called "segments"
-
-    """
-    def _modify_segments(seg_list, seg_prefix):
-        # extract segments from list representation into objects
-        segs = [
-            Segment.from_list(s) for s in seg_list
-        ]
-        # update segment IDs
-        for i, s in enumerate(segs, start=1):
-            s.segment_id = "{}_{}".format(seg_prefix, i)
-
-        return segs
-
-    # merge segments - this allows to have more than one segment per
-    # "monomer" alignment
-    segments_1 = _modify_segments(kwargs["first_segments"], "A")
-    segments_2 = _modify_segments(kwargs["second_segments"], "B")
-    segments_complex = segments_1 + segments_2
-    outcfg["segments"] = [s.to_list() for s in segments_complex]
-
-    return outcfg
 
 def _run_describe_concatenation(outcfg, **kwargs):
     """
@@ -419,13 +382,13 @@ def best_hit(**kwargs):
 
         # read in annotation to a file and rename the appropriate column
         annotation_table = read_species_annotation_table(annotations_file)
-        print(annotation_table.head())
+
         # read identity file
         similarities = pd.read_csv(identities_file)
 
         # create a pd.DataFrame containing the best hit in each organism
         most_similar_in_species = most_similar_by_organism(similarities, annotation_table)
-        print(most_similar_in_species.head())
+
         if use_best_reciprocal:
             paralogs = find_paralogs(
                 target_sequence, most_similar_in_species,
@@ -515,15 +478,157 @@ def best_hit(**kwargs):
     return outcfg
 
 
+def statistical_energy(**kwargs):
+    """
+    Protocol:
+
+    Concatenate alignments based on the best hit
+    to the focus sequence in each species
+
+    Parameters
+    ----------
+    Mandatory kwargs arguments:
+        See list below in code where calling check_required
+
+    Returns
+    -------
+    outcfg : dict
+        Output configuration of the pipeline, including
+        the following fields:
+
+        alignment_file
+        raw_alignment_file
+        focus_mode
+        focus_sequence
+        segments
+        frequencies_file
+        identities_file
+        num_sequences
+        num_sites
+        raw_focus_alignment_file
+        statistics_file
+    """
+    check_required(
+        kwargs,
+        [
+            "prefix",
+            "first_alignment_file", "second_alignment_file",
+            "first_focus_sequence", "second_focus_sequence",
+            "first_focus_mode", "second_focus_mode",
+            "first_segments", "second_segments",
+            "first_identities_file", "second_identities_file",
+            "first_annotation_file", "second_annotation_file",
+        ]
+    )
+
+    prefix = kwargs["prefix"]
+
+    # make sure input alignments
+    verify_resources(
+        "Input alignment does not exist",
+        kwargs["first_alignment_file"], kwargs["second_alignment_file"]
+    )
+
+    # make sure output directory exists
+    create_prefix_folders(prefix)
+
+    def _load_monomer_info(annotations_file, identities_file):
+
+        # read in annotation to a file and rename the appropriate column
+        annotation_table = read_species_annotation_table(annotations_file)
+
+        # read identity file
+        similarities = pd.read_csv(identities_file)
+
+        monomer_info = annotation_table.merge(similarities,on='id')
+        return monomer_info
+
+    # prep those tuples
+    first_monomer_info = _load_monomer_info(
+        kwargs["first_annotation_file"],
+        kwargs["first_identities_file"]
+    )
+
+    second_monomer_info = _load_monomer_info(
+        kwargs["second_annotation_file"],
+        kwargs["second_identities_file"]
+    )
+
+    # CALL YOUR FUNCTION
+    paired_ids = best_pairing(
+        first_monomer_info,
+        second_monomer_info,
+        10,
+        100,
+        **kwargs
+        #kwargs["n_pairing_iterations"],
+        #kwargs["n_increase_per_iteration"]
+
+    )
+    # paired_ids must be a pd.DataFrame with columns: id_1 and id_2
+    stat_energy_file = prefix + "_energies.csv"
+    outcfg["statistical_energy_file"] = stat_energy_file
+    paired_ids.to_csv(stat_energy_file)
+
+    # write concatenated alignment with distance filtering
+    target_seq_id, target_seq_index, raw_ali, mon_ali_1, mon_ali_2 = \
+        write_concatenated_alignment(
+            paired_ids,
+            kwargs["first_alignment_file"],
+            kwargs["second_alignment_file"],
+            kwargs["first_focus_sequence"],
+            kwargs["second_focus_sequence"]
+        )
+
+    # save the alignment files
+    raw_alignment_file = prefix + "_raw.fasta"
+    with open(raw_alignment_file, "w") as of:
+        raw_ali.write(of)
+
+    mon_alignment_file_1 = prefix + "_monomer_1.fasta"
+    with open(mon_alignment_file_1, "w") as of:
+        mon_ali_1.write(of)
+
+    mon_alignment_file_2 = prefix + "_monomer_2.fasta"
+    with open(mon_alignment_file_2, "w") as of:
+        mon_ali_2.write(of)
+
+    aln_outcfg, _ = modify_alignment(
+        raw_ali,
+        target_seq_index,
+        target_seq_id,
+        kwargs["first_region_start"],
+        **kwargs
+    )
+
+    # make sure we return all the necessary information:
+    # * alignment_file: final concatenated alignment that will go into plmc
+    # * focus_sequence: this is the identifier of the concatenated target
+    #   sequence which will be passed into plmc with -f
+    outcfg = aln_outcfg
+    outcfg["raw_alignment_file"] = raw_alignment_file
+    outcfg["focus_sequence"] = target_seq_id
+
+    # Update the segments
+    outcfg = modify_complex_segments(outcfg, **kwargs)
+
+    # Describe the statistics of the concatenation
+    outcfg = _run_describe_concatenation(outcfg, **kwargs)
+
+    return outcfg
+
+
 # list of available EC inference protocols
 PROTOCOLS = {
     # concatenate based on genomic distance ("operon-based")
     "genome_distance": genome_distance,
 
     # concatenate based on best hit per genome ("species")
-    "best_hit": best_hit
-}
+    "best_hit": best_hit,
 
+    # pair based on statistical energy
+    "statistical_energy": statistical_energy
+}
 
 def run(**kwargs):
     """
