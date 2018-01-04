@@ -139,7 +139,6 @@ def write_concatenated_alignment(id_pairing, alignment_1, alignment_2,
     return target_header, target_seq_idx, full_ali, monomer_ali_1, monomer_ali_2
 
 
-
 def modify_complex_segments(outcfg, **kwargs):
     """
     Modifies the output configuration so
