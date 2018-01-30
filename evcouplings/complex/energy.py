@@ -5,9 +5,8 @@ alignment
 
 Authors:
     Anna Green
-    Mark Chonofsky
 """
-
+import ctypes
 import numpy as np
 import pandas as pd
 import numba
@@ -27,10 +26,10 @@ from evcouplings.complex.protocol import modify_complex_segments
 from evcouplings.couplings.protocol import mean_field
 
 ID_THRESH = .8
-CPU_COUNT = 3
+CPU_COUNT = 2
 
 def _write_format(item_list):
-    return ",".join(list(map(str, item_list))) + "\n"
+    return "\t".join(list(map(str, item_list))) + "\n"
 
 def _get_index_for_species(alignment,
                            monomer_information,
@@ -77,9 +76,9 @@ def _E_matrix_to_file(E_matrix, first_species_index,
             all_list.append(l)
     return all_list
 
-def inter_energy_per_species(Jij, species, sequences_X, sequences_Y,
+def inter_energy_per_species(Jij, Jij_dim, species, sequences_X, sequences_Y,
                              first_alignment_indices, second_alignment_indices,
-                             positions_i, positions_j, queue):
+                             positions_i, positions_j):
 
     """
 
@@ -96,21 +95,23 @@ def inter_energy_per_species(Jij, species, sequences_X, sequences_Y,
 
     """
     # call H
-    matrix = inter_sequence_hamiltonians(sequences_X, sequences_Y, Jij, positions_i, positions_j)
+    Jij = np.frombuffer(Jij, dtype=np.float64)
+    Jij_dim = np.frombuffer(Jij_dim, dtype=np.int32)
+
+    matrix = inter_sequence_hamiltonians(sequences_X, sequences_Y, Jij, Jij_dim, positions_i, positions_j)
 
     list_of_E = _E_matrix_to_file(
         matrix, first_alignment_indices, second_alignment_indices, species
     )
 
-    queue.put(list_of_E)
     return list_of_E
 
 # def inter_energy_per_species(i,queue):
 #     queue.put('ASDF')
 #     return 'ASDF'
 
-@numba.jit(nopython=True)
-def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, positions_i, positions_j):
+#@numba.jit(nopython=True)
+def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positions_i, positions_j):
     """
     Calculates the Hamiltonian of the global probability distribution P(A_1, ..., A_L)
     for a given sequence A_1,...,A_L from J_ij and h_i parameters
@@ -145,7 +146,10 @@ def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, positions_i, pos
             for ali_i, model_i in positions_i:
                 for ali_j, model_j in positions_j:
                     #print(model_i,model_j,ali_i,ali_j,A_x[ali_i],A_y[ali_j])
-                    Jij_sum = Jij_sum + J_ij[model_i, model_j, A_x[ali_i], A_y[ali_j]]
+                    #print(Jij_dim)
+                    Jij_sum = Jij_sum + J_ij[
+                        np.ravel_multi_index((model_i, model_j, A_x[ali_i], A_y[ali_j]), Jij_dim)
+                    ]
             H[s_x, s_y] = Jij_sum
 
     return H
@@ -218,15 +222,41 @@ def initialize_alignment(first_monomer_info, second_monomer_info,
     return aln_outcfg, current_id_pairs
 
 
-def writer(outfilename, queue):
-    with open(outfilename, "w") as of:
-        while 1:
-            m = queue.get()
-            if m == "kill":
-                break
-            for i in m:
-                of.write(_write_format(i))
+class ProcessWriteResult(mp.Process):
 
+    def __init__(self, writer_queue, outfilename):
+        mp.Process.__init__(self)
+        self.writer_queue = writer_queue
+        self.outfile = outfilename
+
+    def run(self):
+        while True:
+            with open(self.outfile, "w") as of:
+
+                result = self.writer_queue.get()
+                if result is None:
+                    break
+                else:
+                    for i in result:
+                        of.write(_write_format(i))
+
+class ProcessHamiltonianCalc(mp.Process):
+
+    def __init__(self, worker_queue, writer_queue, shared_Jij_arr, shared_Jij_dim):
+        mp.Process.__init__(self)
+        self.writer_queue = writer_queue
+        self.worker_queue = worker_queue
+        self.J_ij = shared_Jij_arr
+        self.dim = shared_Jij_dim
+
+    def run(self):
+        while True:
+            work = self.worker_queue.get()
+            if work is None:
+                break
+            else:
+                result = inter_energy_per_species(self.J_ij,self.dim,**work)
+                self.writer_queue.put(result)
 
 def best_pairing(first_monomer_info, second_monomer_info,
                  N_pairing_iterations, N_increase_per_iteration,
@@ -247,7 +277,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
         has columns id_1 and id_2
     """
 
-    COLUMN_NAMES = ["species", "first_id", "second_id", "E"]
+    COLUMN_NAMES = ["species", "id_1", "id_2", "E"]
 
 
     def _create_mapped_seg_tuples(alignment,model,**current_kwargs):
@@ -347,7 +377,9 @@ def best_pairing(first_monomer_info, second_monomer_info,
     current_kwargs["alignment_file"] = starting_aln_cfg["alignment_file"]
     current_kwargs = modify_complex_segments(current_kwargs, **current_kwargs)
 
-    for iteration in range(3):
+    for iteration in range(1):
+
+        ### Run the mean field
         print("iteration "+str(iteration))
         # #run the mean field calculation on the alignment
         # mean_field_outcfg = mean_field(**current_kwargs)
@@ -356,9 +388,14 @@ def best_pairing(first_monomer_info, second_monomer_info,
         # outcfg["ec_file_{}".format(iteration)] = mean_field_outcfg["ec_file"]
 
         # read in the parameters of mean field
-        #model = CouplingsModel(mean_field_outcfg["model_file"])
-        model = CouplingsModel("output/complex_238/concatenate/aux/complex_238_iter0.model")
+#        model = CouplingsModel(mean_field_outcfg["model_file"])
 
+        model = CouplingsModel("output/complex_238/concatenate/aux/complex_238_iter0.model")
+        shared_Jij_arr = mp.RawArray('d',model.J_ij.flatten())
+        shared_Jij_dim = mp.RawArray(ctypes.c_int,np.array(model.J_ij.shape))
+        print(model.J_ij.shape)
+
+        ### Set up variable names
         current_iteration_E_table = "energy_output_file_iter{}".format(iteration)
         outcfg[current_iteration_E_table] = prefix + "_energy_iter{}.csv".format(iteration)
 
@@ -371,21 +408,20 @@ def best_pairing(first_monomer_info, second_monomer_info,
             concat_aln, model, **current_kwargs
         )
 
-        # Set up our parallel processing magic
-        manager = mp.Manager()
-        queue = manager.Queue() # will hold results of E calculation
-        pool = mp.Pool(CPU_COUNT)
+        ### Set up our parallel processing magic
+        worker_queue = mp.JoinableQueue() #queue of things to be calculated
+        writer_queue = mp.Queue() #queue of results to be written
+        processes = [] # list of processes
 
-        # whenever a result comes back in queue, write it to file
-        watcher = pool.apply_async(writer, (outcfg[current_iteration_E_table], queue))
+        for i in range(CPU_COUNT):
+            p = ProcessHamiltonianCalc(worker_queue, writer_queue, shared_Jij_arr, shared_Jij_dim)
+            processes.append(p)
+            p.start()
 
-        # calculate inter sequence energy
-        jobs = []
+        # Now generate jobs to put in the worker queue
         for species in species_set:
-            print(species,len(jobs))
-
-            # worker process call
-
+            print(species)
+            # get the indices in the alignment matrix of our sequences of interest
             first_alignment_indices = _get_index_for_species(
                 alignment_1, first_monomer_groups, species
             )
@@ -399,26 +435,27 @@ def best_pairing(first_monomer_info, second_monomer_info,
             # get the Y sequences
             sequences_Y = alignment_2.matrix_mapped[second_alignment_indices, :]
 
-            p = pool.apply_async(
-                inter_energy_per_species,(
-                    model.J_ij, species, sequences_X, sequences_Y,
-                    first_alignment_indices, second_alignment_indices,
-                    filtered_segment_1, filtered_segment_2, queue,
-                )
+            worker_queue.put({
+                "species":species,
+                "sequences_X": sequences_X,
+                "sequences_Y": sequences_Y,
+                "first_alignment_indices": first_alignment_indices,
+                "second_alignment_indices": second_alignment_indices,
+                "positions_i": filtered_segment_1,
+                "positions_j": filtered_segment_2
+            }
             )
+        print("waiting for workers")
+        # make sure all worker processes are done
+        #worker_queue.join()
 
-            jobs.append(p)
-
-        # collect results from workers
-        for job in jobs:
-            job.get()
-
-        queue.put('kill')
-        pool.close()
-        pool.join()
+        print("workers done")
+        # put a termination signal for each processes in the worker queue
+        for i in range(CPU_COUNT):
+            worker_queue.put(None)
 
         energy_df = pd.read_csv(
-            outcfg[current_iteration_E_table], index_col=None, names=COLUMN_NAMES
+            outcfg[current_iteration_E_table], index_col=None, names=COLUMN_NAMES, sep="\t"
         )
 
         energy_df = energy_df.sort_values("E", ascending=False)
@@ -427,6 +464,16 @@ def best_pairing(first_monomer_info, second_monomer_info,
         # take the top M E
         M = N_increase_per_iteration * (iteration + 1)
         top_E = energy_df.sort_values("E",ascending=False).iloc[0:M,:]
+
+        # change the index back to identifier to writing of alignment
+        def _index_to_id(alignment, df, COLUMN):
+
+            indices = list(map(int, df.loc[:, COLUMN].dropna()))
+            ids = alignment.ids[indices]
+            df.loc[:, COLUMN] = list(ids)
+            return df
+        top_E = _index_to_id(alignment_1, top_E, "id_1")
+        top_E = _index_to_id(alignment_2, top_E, "id_2")
         current_id_pairs = pd.concat([current_id_pairs, top_E])
 
         # write the new concatenated alignment and filter it
@@ -457,7 +504,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
 
         # update the configuration file for input into MFDCA
         current_kwargs["alignment_file"] = aln_outcfg["alignment_file"]
+    print("all done")
+    # retun the paired ids and output configuration
+    return current_id_pairs, outcfg
 
-
-#save the major outcfg
-# retun the correct shit

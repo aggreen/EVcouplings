@@ -555,7 +555,7 @@ def statistical_energy(**kwargs):
     )
 
     # CALL YOUR FUNCTION
-    paired_ids = best_pairing(
+    paired_ids, outcfg = best_pairing(
         first_monomer_info,
         second_monomer_info,
         10,
@@ -566,6 +566,7 @@ def statistical_energy(**kwargs):
 
     )
     # paired_ids must be a pd.DataFrame with columns: id_1 and id_2
+    print("finished pairing the ids")
     stat_energy_file = prefix + "_energies.csv"
     outcfg["statistical_energy_file"] = stat_energy_file
     paired_ids.to_csv(stat_energy_file)
