@@ -393,8 +393,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
         model = CouplingsModel("output/complex_238/concatenate/aux/complex_238_iter0.model")
         shared_Jij_arr = mp.RawArray('d',model.J_ij.flatten())
         shared_Jij_dim = mp.RawArray(ctypes.c_int,np.array(model.J_ij.shape))
-        print(model.J_ij.shape)
-
+ 
         ### Set up variable names
         current_iteration_E_table = "energy_output_file_iter{}".format(iteration)
         outcfg[current_iteration_E_table] = prefix + "_energy_iter{}.csv".format(iteration)
