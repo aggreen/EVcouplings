@@ -22,6 +22,9 @@ from evcouplings.couplings.model import CouplingsModel
 from evcouplings.utils.system import (
     create_prefix_folders, insert_dir
 )
+from evcouplings.couplings.mapping import (
+    Segment, SegmentIndexMapper
+)
 from evcouplings.complex.protocol import modify_complex_segments
 from evcouplings.couplings.protocol import mean_field
 
@@ -106,10 +109,6 @@ def inter_energy_per_species(Jij, Jij_dim, species, sequences_X, sequences_Y,
 
     return list_of_E
 
-# def inter_energy_per_species(i,queue):
-#     queue.put('ASDF')
-#     return 'ASDF'
-
 #@numba.jit(nopython=True)
 def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positions_i, positions_j):
     """
@@ -130,6 +129,17 @@ def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positio
         Float matrix of size len(sequences_x) x len(sequences_y), where each position i,j corresponds
         to the sum of Jijs between the given positions in sequences_X[i] and sequences_Y[j]
     """
+
+    def ravel_idx(idx_tuple, array_shape):
+        current_num = 0
+        for idx, pos in enumerate(idx_tuple):
+            array_to_multiply = array_shape[idx + 1::]
+            product = 1
+            for i in array_to_multiply:
+                product = product * i
+            current_num += pos * product
+        return (int(current_num))
+
     # iterate over sequences
     N_x, L_x = sequences_X.shape
     N_y, L_y = sequences_Y.shape
@@ -137,22 +147,49 @@ def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positio
     H = np.zeros((N_x, N_y))
 
     for s_x in range(N_x):
-        A_x = sequences_X[s_x]
+        A_x = sequences_X[s_x, :]
+        print("the real sequences",A_x,sequences_X)
+
         for s_y in range(N_y):
-            A_y = sequences_Y[s_y]
+            A_y = sequences_Y[s_y, :]
 
             Jij_sum = 0.0
-
+            print(positions_i)
             for ali_i, model_i in positions_i:
+                print(ali_i, A_x[ali_i])
                 for ali_j, model_j in positions_j:
-                    #print(model_i,model_j,ali_i,ali_j,A_x[ali_i],A_y[ali_j])
-                    #print(Jij_dim)
-                    Jij_sum = Jij_sum + J_ij[
-                        np.ravel_multi_index((model_i, model_j, A_x[ali_i], A_y[ali_j]), Jij_dim)
-                    ]
-            H[s_x, s_y] = Jij_sum
+                    if A_x[ali_i] == -1:
+                        continue
+                    else:
+                        i = A_x[ali_i]
+                    print("ended up with", i, ali_i, A_x[ali_i])
+                    if A_y[ali_j] == -1:
+                        continue
+                    else:
+                        j = A_y[ali_j]
 
+                    current_num = 0
+
+                    for idx, pos in enumerate([model_i, model_j, i, j]):
+                        array_to_multiply = Jij_dim[idx + 1::]
+                        product = 1
+                        for i in array_to_multiply:
+                            product = product * i
+                        current_num += pos * product
+                    index = int(current_num)
+                    #print(index, i)
+
+                    #print(model_i, model_j, ali_i, i, j)
+                    Jij_sum = Jij_sum + J_ij[index]
+                    i = np.nan
+                    j = np.nan
+
+            break
+
+            H[s_x, s_y] = Jij_sum
+        break
     return H
+
 
 def initialize_alignment(first_monomer_info, second_monomer_info,
                           **kwargs):
@@ -258,6 +295,112 @@ class ProcessHamiltonianCalc(mp.Process):
                 result = inter_energy_per_species(self.J_ij,self.dim,**work)
                 self.writer_queue.put(result)
 
+# get the energy difference
+def _energy_diff(df):
+    """
+    For each potential pairing of id_1, calculate the difference
+    in statistical energy between that pairing and then next highest
+    scoring pairing, and store as E_diff_1
+
+    For each potential pairing of id_1, calculate the difference
+    in statistical energy between that pairing and then next highest
+    scoring pairing, and store as E_diff_2
+
+    Params
+    ------
+    df: pd.DataFrame
+        contains columns [id_1, id_2, E]
+
+    Returns
+    -------
+    df: pd.DataFrame
+        contains columns [id_1, id_2, E, E_diff_1, E_diff_2]
+    """
+
+    final_df = pd.DataFrame(columns=list(df.columns) + ["E_diff_1", "E_diff_2"])
+    grouped_df = df.groupby("id_1")
+    for id_1, _df in grouped_df:
+
+        # sort the dataframe by statistical energy
+        _sorted_df = _df.sort_values("E", ascending=False)
+        _sorted_df.loc[:, "E_diff"] = 0.
+        _sorted_df = _sorted_df.reset_index(drop=True)
+
+        # subtract the statE of each row from the previous row
+        for index in _sorted_df.index[0:-1]:
+            print(_sorted_df.loc[index, "E"],_sorted_df.loc[index+1, "E"])
+            #print()
+            _sorted_df.loc[index, "E_diff_1"] = _sorted_df.loc[index, "E"] - _sorted_df.loc[index + 1, "E"]
+
+        final_df = pd.concat([final_df, _sorted_df])
+
+    grouped_df = final_df.groupby("id_2")
+    for id_2, _df in grouped_df:
+
+        # sort the dataframe by statistical energy
+        _sorted_df = _df.sort_values("E", ascending=False)
+        _sorted_df.loc[:, "E_diff"] = 0.
+        _sorted_df = _sorted_df.reset_index(drop=True)
+
+        # subtract the statE of each row from the previous row
+        for index in _sorted_df.index[0:-1]:
+            print(_sorted_df.loc[index, "E"],_sorted_df.loc[index+1, "E"])
+            #print()
+            _sorted_df.loc[index, "E_diff_2"] = _sorted_df.loc[index, "E"] - _sorted_df.loc[index + 1, "E"]
+
+    return final_df.sort_values("E_diff_1", ascending=False)
+
+
+# get the energy difference
+def df_to_assigned_pairs(df):
+    """
+    implements the Bitbol 2016 Figure S12 pairing algorithm
+
+    Params
+    ------
+    df: pd.DataFrame
+        contains columns [id_1, id_2, E]
+
+    Returns
+    -------
+    df: pd.DataFrame
+        contains columns [id_1, id_2, E, E_diff, E_delta]
+        the best pairings as determined by the alorgithm
+    """
+    final_df = pd.DataFrame(columns=list(df.columns) + ["E_delta"])
+    grouped_df = df.groupby("species")
+
+    for species, _df in grouped_df:
+
+        # END CONDITION: all of id_1 are paired
+        _to_be_paired = _df.copy()
+        n_paired = 0
+        latest_E_delta = np.nan
+
+        while len(_to_be_paired) > 0:
+
+            # get the highest E pair
+            sort = _to_be_paired.sort_values("E", ascending=False)
+            highest_pair = sort.iloc[0, :]
+            first_id = int(highest_pair.id_1)
+            second_id = int(highest_pair.id_2)
+
+            # remove all related
+            _to_be_paired = _to_be_paired.query("id_1 != @first_id and id_2 != @second_id")
+
+            # score based on Bitbol confidence score
+            if len(_to_be_paired) > 0:
+                highest_pair["E_delta"] = min(highest_pair["E_diff_1"], highest_pair["E_diff_2"]) / (n_paired + 1)
+                latest_E_delta = highest_pair["E_delta"]
+            else:
+                highest_pair["E_delta"] = latest_E_delta
+
+            n_paired += 1
+
+            final_df = pd.concat([final_df, highest_pair.to_frame().transpose()])
+
+    return final_df.sort_values("E_delta", ascending=False)
+
 def best_pairing(first_monomer_info, second_monomer_info,
                  N_pairing_iterations, N_increase_per_iteration,
                  **kwargs):
@@ -279,49 +422,43 @@ def best_pairing(first_monomer_info, second_monomer_info,
 
     COLUMN_NAMES = ["species", "id_1", "id_2", "E"]
 
+    def _create_mapped_seg_tuples(params, **current_kwargs):
 
-    def _create_mapped_seg_tuples(alignment,model,**current_kwargs):
+        first_segment = Segment.from_list(current_kwargs["segments"][0])
+        second_segment = Segment.from_list(current_kwargs["segments"][1])
 
-        # get the upper case positions to use
-        segment_1_positions = current_kwargs["segments"][0][5]
-        segment_2_positions = current_kwargs["segments"][1][5]
-        segment_id = ["A"] * len(segment_1_positions) + ["B"] * len(segment_2_positions)
-
-        #
-        alignment_positions = list(range(1,alignment.L+1))
-
-        # filter alignment.L positions to make monomer alignment positions to use
-        focus_cols = np.array([
-            c.isupper() and c not in [
-                alignment._insert_gap
-            ]
-            for c in alignment.matrix[0,:]
-        ])
-        focus_cols = [np.nan if x is False else True for x in focus_cols]
-
-        model_index = [model.index_map[v] if v in model.index_map else np.nan for v in alignment_positions]
-
-        mapping_table = pd.DataFrame.from_dict({
-            "segments_idx1" : segment_1_positions + segment_2_positions,
-            "segments_idx0": [x-1 for x in segment_1_positions + segment_2_positions],
-            "segment_id": segment_id,
-            "alignment_idx1": alignment_positions,
-            "alignment_idx0": [x-1 for x in alignment_positions],
-            "focus_columns": focus_cols,
-            "model_index": model_index
-        })
-        mapping_table.to_csv("TEST.csv")
-        mapping_table = mapping_table.dropna()
-
-        segment_1 = mapping_table.query("segment_id == 'A'")
-        segment_2 = mapping_table.query("segment_id == 'B'")
-
-        #return tuple of 0-indexed segment of monomer alingment positions to use
-        #plus model positions
-        return (
-            list(zip(segment_1.segments_idx0.astype(int),segment_1.model_index.astype(int))),
-            list(zip(segment_2.segments_idx0.astype(int),segment_2.model_index.astype(int)))
+        index_start = first_segment.region_start
+        r = SegmentIndexMapper(
+            True,  # use focus mode
+            index_start,  # first index of first segment
+            first_segment,
+            second_segment
         )
+        c = r.patch_model(model=params)
+
+        index_map = c.index_map
+        segment_1 = {k: v for k, v in index_map.items() if "A_1" in k}
+        segment_2 = {k: v for k, v in index_map.items() if "B_1" in k}
+
+        segment_1_aln_positions = [k[1] - 1 for k, v in segment_1.items()]
+        segment_2_aln_positions = [k[1] - 1 for k, v in segment_2.items()]
+        segment_1_model_positions = [v for k, v in segment_1.items()]
+        segment_2_model_positions = [v for k, v in segment_2.items()]
+
+        # return tuple of 0-indexed segment of monomer alingment positions to use
+        # plus model positions
+        return (
+            list(sorted(zip(segment_1_aln_positions, segment_1_model_positions))),
+            list(sorted(zip(segment_2_aln_positions, segment_2_model_positions)))
+        )
+
+    # change the index back to identifier to writing of alignment
+    def _index_to_id(alignment, df, COLUMN):
+
+        indices = list(map(int, df.loc[:, COLUMN].dropna()))
+        ids = alignment.ids[indices]
+        df.loc[:, COLUMN] = list(ids)
+        return df
 
     outcfg = {}
 
@@ -366,7 +503,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
         first_monomer_info, second_monomer_info,
         **current_kwargs
     )
-
+    print("alignment initialized")
     # group the monomer information tables by species for easier lookup
     first_monomer_groups = first_monomer_info.groupby("species")
     second_monomer_groups = second_monomer_info.groupby("species")
@@ -390,7 +527,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
         # read in the parameters of mean field
 #        model = CouplingsModel(mean_field_outcfg["model_file"])
 
-        model = CouplingsModel("output/complex_238/concatenate/aux/complex_238_iter0.model")
+        model = CouplingsModel("complex_238_dist_paired/couplings/complex_238.model")
         shared_Jij_arr = mp.RawArray('d',model.J_ij.flatten())
         shared_Jij_dim = mp.RawArray(ctypes.c_int,np.array(model.J_ij.shape))
  
@@ -404,7 +541,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
             concat_aln = Alignment.from_file(inf)
 
         filtered_segment_1, filtered_segment_2 = _create_mapped_seg_tuples(
-            concat_aln, model, **current_kwargs
+            model, **current_kwargs
         )
 
         ### Set up our parallel processing magic
@@ -429,10 +566,13 @@ def best_pairing(first_monomer_info, second_monomer_info,
             )
 
             # get the X sequences
-            sequences_X = alignment_1.matrix_mapped[first_alignment_indices, :]
+            sequences_X = alignment_1.matrix_mapped[first_alignment_indices, :] - 1
 
             # get the Y sequences
-            sequences_Y = alignment_2.matrix_mapped[second_alignment_indices, :]
+            sequences_Y = alignment_2.matrix_mapped[second_alignment_indices, :] - 1
+            print(sequences_X.shape, sequences_X[0,:])
+            print(sequences_Y.shape, sequences_Y[0,:])
+            print(filtered_segment_1)
 
             worker_queue.put({
                 "species":species,
@@ -444,6 +584,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
                 "positions_j": filtered_segment_2
             }
             )
+
         print("waiting for workers")
         # make sure all worker processes are done
         #worker_queue.join()
@@ -453,27 +594,21 @@ def best_pairing(first_monomer_info, second_monomer_info,
         for i in range(CPU_COUNT):
             worker_queue.put(None)
 
+        # read in the energy dataframe and determine which pairs to take
         energy_df = pd.read_csv(
             outcfg[current_iteration_E_table], index_col=None, names=COLUMN_NAMES, sep="\t"
         )
-
         energy_df = energy_df.sort_values("E", ascending=False)
-        print(energy_df.head())
-
-        # take the top M E
-        M = N_increase_per_iteration * (iteration + 1)
-        top_E = energy_df.sort_values("E",ascending=False).iloc[0:M,:]
-
-        # change the index back to identifier to writing of alignment
-        def _index_to_id(alignment, df, COLUMN):
-
-            indices = list(map(int, df.loc[:, COLUMN].dropna()))
-            ids = alignment.ids[indices]
-            df.loc[:, COLUMN] = list(ids)
-            return df
+        energy_df_with_diff = _energy_diff(energy_df)
+        top_E = df_to_assigned_pairs(energy_df_with_diff)
         top_E = _index_to_id(alignment_1, top_E, "id_1")
         top_E = _index_to_id(alignment_2, top_E, "id_2")
-        current_id_pairs = pd.concat([current_id_pairs, top_E])
+        current_iteration_diff_E_table = "energy_output_file_iter{}_diff".format(iteration)
+        outcfg[current_iteration_diff_E_table] = prefix + "_energy_iter{}_diff.csv".format(iteration)
+        top_E.to_csv(outcfg[current_iteration_diff_E_table], index=False)
+
+        M = N_increase_per_iteration * iteration
+        current_id_pairs = top_E.iloc[0:M,:]
 
         # write the new concatenated alignment and filter it
         target_seq_id, target_seq_index, raw_ali, mon_ali_1, mon_ali_2 = \
