@@ -178,20 +178,24 @@ def extract_embl_cds_list(input_file):
 
 
     # extract the relevant information
+    cds_list = []
+
     for record in SeqIO.parse(open(input_file), "embl"):
-        cds_list = []
+        cds_per_record = []
         for feature in record.features:
             if feature.type == "CDS":
-                start, end = feature.location.start.position, feature.location.end.position
 
+                start, end = feature.location.start.position, feature.location.end.position
                 uniprot_id_list = []
                 if "db_xref" in feature.qualifiers:
                     uniprot_id_list = [
                         r.split(":")[1] for r in feature.qualifiers["db_xref"] if r.startswith("UniProt")
                     ]
 
-                cds_list.append((record.id, feature.ref, ",".join(uniprot_id_list), start, end))
+                cds_per_record.append((record.id, feature.ref, ",".join(uniprot_id_list), start, end))
 
+        if len(cds_per_record) == 1:
+            cds_list += cds_per_record
     return cds_list
 
 
@@ -229,20 +233,21 @@ def embl_mapping_by_directory(ftp_url, ftp_cwd, cds_output_path, cds_output_file
         # iterate through each file, download and extract info
         for f in files:
             # file is the last argument in the returned string
-            file_to_download = f.split(" ")[-1]
-            print(ftp_cwd, ftp_url, file_to_download)
-            # download and unzip the file to a tempfile
-            temp = tempfile.NamedTemporaryFile(prefix=cds_output_path)
-            with open(temp.name, "wb") as ena_temp_file:
-                print(temp.name, ena_temp_file)
-
-                callback = partial(_callback, ena_temp_file, None, decompressor)
-                ftp.retrbinary("RETR {}".format(file_to_download), callback, blocksize=8192)
+            # file_to_download = f.split(" ")[-1]
+            # print(ftp_cwd, ftp_url, file_to_download)
+            # # download and unzip the file to a tempfile
+            # temp = tempfile.NamedTemporaryFile(prefix=cds_output_path)
+            # with open(temp.name, "wb") as ena_temp_file:
+            #     print(temp.name, ena_temp_file)
+            #
+            #     callback = partial(_callback, ena_temp_file, None, decompressor)
+            #     ftp.retrbinary("RETR {}".format(file_to_download), callback, blocksize=8192)
 
                 # get the genome location information and uniprot mapping
                 # from the CDS file
+                ena_temp_file = "/Users/AG/Dropbox/evcouplings_dev/database_update/cum_htc_inv_01_r136.cds"
                 cds_list = extract_embl_cds_list(ena_temp_file)
-
+                print(cds_list)
                 # Ensure that the file only had one unique mapping
                 if len(cds_list) == 1:
                     cds_string = "\t".join(map(str, cds_list[0]))
@@ -252,7 +257,7 @@ def embl_mapping_by_directory(ftp_url, ftp_cwd, cds_output_path, cds_output_file
 
             # clean up the output file
             # os.unlink(temp.name)
-            break
+                break
 
 
 def run(**kwargs):
