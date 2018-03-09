@@ -672,3 +672,37 @@ def run(**kwargs):
         )
 
     return PROTOCOLS[kwargs["protocol"]](**kwargs)
+
+if __name__ == "__main__":
+    # call the energy pairing protocol
+    PREFIX = "/Users/AG/Dropbox/evcouplings_dev/pairing_by_E/"
+    import ruamel_yaml as yaml
+    config = yaml.safe_load(open(PREFIX+"output/complex_238/concatenate/complex_238_concatenate.incfg", "r"))
+
+    print("calling function")
+
+    outcfg = statistical_energy(
+        prefix= "test_out",
+        first_alignment_file= PREFIX+"output/complex_238/align_1/complex_238_restricted.a2m",
+        second_alignment_file= PREFIX+"output/complex_238/align_2/complex_238_restricted.a2m",
+        first_focus_sequence= "BTUC_ECOLI/1-326",
+        second_focus_sequence= "BTUF_ECOLI/1-266",
+        first_focus_mode= True,
+        second_focus_mode=True,
+        first_segments= config["first_segments"],
+        second_segments= config["second_segments"],
+        first_identities_file= PREFIX+"output/complex_238/align_1/complex_238_identities.csv",
+        second_identities_file= PREFIX+"output/complex_238/align_2/complex_238_identities.csv",
+        first_annotation_file=PREFIX+"output/complex_238/align_1/complex_238_annotation.csv",
+        second_annotation_file= PREFIX+"output/complex_238/align_2/complex_238_annotation.csv",
+        first_region_start=config["first_region_start"],
+        second_region_start=config["second_region_start"],
+        seqid_filter=None,
+        compute_num_effective_seqs=False,
+
+        theta=0.8,
+        minimum_column_coverage=0.5,
+        minimum_sequence_coverage=0.5,
+        hhfilter=""
+
+    )

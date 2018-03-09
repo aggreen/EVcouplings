@@ -148,21 +148,22 @@ def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positio
 
     for s_x in range(N_x):
         A_x = sequences_X[s_x, :]
-        print("the real sequences",A_x,sequences_X)
 
         for s_y in range(N_y):
             A_y = sequences_Y[s_y, :]
 
             Jij_sum = 0.0
-            print(positions_i)
+
             for ali_i, model_i in positions_i:
-                print(ali_i, A_x[ali_i])
+
                 for ali_j, model_j in positions_j:
+
+
                     if A_x[ali_i] == -1:
                         continue
                     else:
                         i = A_x[ali_i]
-                    print("ended up with", i, ali_i, A_x[ali_i])
+
                     if A_y[ali_j] == -1:
                         continue
                     else:
@@ -173,21 +174,19 @@ def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positio
                     for idx, pos in enumerate([model_i, model_j, i, j]):
                         array_to_multiply = Jij_dim[idx + 1::]
                         product = 1
-                        for i in array_to_multiply:
-                            product = product * i
+                        for ia in array_to_multiply:
+                            product = product * ia
                         current_num += pos * product
                     index = int(current_num)
-                    #print(index, i)
 
-                    #print(model_i, model_j, ali_i, i, j)
+                    #print('indexing',model_i, model_j, ali_i, i, j)
                     Jij_sum = Jij_sum + J_ij[index]
                     i = np.nan
                     j = np.nan
 
-            break
 
             H[s_x, s_y] = Jij_sum
-        break
+        #break
     return H
 
 
@@ -527,7 +526,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
         # read in the parameters of mean field
 #        model = CouplingsModel(mean_field_outcfg["model_file"])
 
-        model = CouplingsModel("complex_238_dist_paired/couplings/complex_238.model")
+        model = CouplingsModel("/Users/AG/Dropbox/evcouplings_dev/pairing_by_E/complex_238_dist_paired/couplings/complex_238.model")
         shared_Jij_arr = mp.RawArray('d',model.J_ij.flatten())
         shared_Jij_dim = mp.RawArray(ctypes.c_int,np.array(model.J_ij.shape))
  
@@ -555,6 +554,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
             p.start()
 
         # Now generate jobs to put in the worker queue
+        print(species_set)
         for species in species_set:
             print(species)
             # get the indices in the alignment matrix of our sequences of interest
@@ -587,7 +587,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
 
         print("waiting for workers")
         # make sure all worker processes are done
-        #worker_queue.join()
+        # worker_queue.join()
 
         print("workers done")
         # put a termination signal for each processes in the worker queue
