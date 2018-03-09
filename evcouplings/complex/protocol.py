@@ -679,8 +679,6 @@ if __name__ == "__main__":
     import ruamel_yaml as yaml
     config = yaml.safe_load(open(PREFIX+"output/complex_238/concatenate/complex_238_concatenate.incfg", "r"))
 
-    print("calling function")
-
     outcfg = statistical_energy(
         prefix= "test_out",
         first_alignment_file= PREFIX+"output/complex_238/align_1/complex_238_restricted.a2m",

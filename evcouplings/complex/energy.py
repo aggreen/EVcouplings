@@ -102,7 +102,7 @@ def inter_energy_per_species(Jij, Jij_dim, species, sequences_X, sequences_Y,
     Jij_dim = np.frombuffer(Jij_dim, dtype=np.int32)
 
     matrix = inter_sequence_hamiltonians(sequences_X, sequences_Y, Jij, Jij_dim, positions_i, positions_j)
-
+    print(matrix)
     list_of_E = _E_matrix_to_file(
         matrix, first_alignment_indices, second_alignment_indices, species
     )
@@ -181,12 +181,9 @@ def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positio
 
                     #print('indexing',model_i, model_j, ali_i, i, j)
                     Jij_sum = Jij_sum + J_ij[index]
-                    i = np.nan
-                    j = np.nan
-
 
             H[s_x, s_y] = Jij_sum
-        #break
+
     return H
 
 
@@ -268,7 +265,6 @@ class ProcessWriteResult(mp.Process):
     def run(self):
         while True:
             with open(self.outfile, "w") as of:
-
                 result = self.writer_queue.get()
                 if result is None:
                     break
@@ -292,6 +288,7 @@ class ProcessHamiltonianCalc(mp.Process):
                 break
             else:
                 result = inter_energy_per_species(self.J_ij,self.dim,**work)
+                print(result)
                 self.writer_queue.put(result)
 
 # get the energy difference
@@ -502,7 +499,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
         first_monomer_info, second_monomer_info,
         **current_kwargs
     )
-    print("alignment initialized")
+
     # group the monomer information tables by species for easier lookup
     first_monomer_groups = first_monomer_info.groupby("species")
     second_monomer_groups = second_monomer_info.groupby("species")
@@ -554,7 +551,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
             p.start()
 
         # Now generate jobs to put in the worker queue
-        print(species_set)
+
         for species in species_set:
             print(species)
             # get the indices in the alignment matrix of our sequences of interest
@@ -570,9 +567,6 @@ def best_pairing(first_monomer_info, second_monomer_info,
 
             # get the Y sequences
             sequences_Y = alignment_2.matrix_mapped[second_alignment_indices, :] - 1
-            print(sequences_X.shape, sequences_X[0,:])
-            print(sequences_Y.shape, sequences_Y[0,:])
-            print(filtered_segment_1)
 
             worker_queue.put({
                 "species":species,
@@ -586,13 +580,16 @@ def best_pairing(first_monomer_info, second_monomer_info,
             )
 
         print("waiting for workers")
-        # make sure all worker processes are done
-        # worker_queue.join()
-
-        print("workers done")
         # put a termination signal for each processes in the worker queue
         for i in range(CPU_COUNT):
             worker_queue.put(None)
+
+        # make sure all worker processes are done
+        worker_queue.join()
+
+
+
+        print("workers done")
 
         # read in the energy dataframe and determine which pairs to take
         energy_df = pd.read_csv(
