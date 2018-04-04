@@ -261,16 +261,24 @@ class ProcessWriteResult(mp.Process):
         mp.Process.__init__(self)
         self.writer_queue = writer_queue
         self.outfile = outfilename
+        print("initialized write process")
 
     def run(self):
-        while True:
-            with open(self.outfile, "w") as of:
+            e_output = open(self.outfile, "w")
+            while True:
                 result = self.writer_queue.get()
+                print("writing",result)
                 if result is None:
                     break
                 else:
                     for i in result:
-                        of.write(_write_format(i))
+                        print(i)
+                        e_output.write(_write_format(i))
+            e_output.close()
+            self.writer_queue.close()
+
+            print("finished write process")
+            return
 
 class ProcessHamiltonianCalc(mp.Process):
 
@@ -285,11 +293,16 @@ class ProcessHamiltonianCalc(mp.Process):
         while True:
             work = self.worker_queue.get()
             if work is None:
+                self.worker_queue.task_done()
                 break
+
             else:
                 result = inter_energy_per_species(self.J_ij,self.dim,**work)
                 print(result)
                 self.writer_queue.put(result)
+                self.worker_queue.task_done()
+        #self.worker_queue.close()
+        return
 
 # get the energy difference
 def _energy_diff(df):
@@ -510,7 +523,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
     current_kwargs["alignment_file"] = starting_aln_cfg["alignment_file"]
     current_kwargs = modify_complex_segments(current_kwargs, **current_kwargs)
 
-    for iteration in range(1):
+    for iteration in range(2):
 
         ### Run the mean field
         print("iteration "+str(iteration))
@@ -541,18 +554,21 @@ def best_pairing(first_monomer_info, second_monomer_info,
         )
 
         ### Set up our parallel processing magic
-        worker_queue = mp.JoinableQueue() #queue of things to be calculated
         writer_queue = mp.Queue() #queue of results to be written
+        write_process = ProcessWriteResult(writer_queue, outcfg[current_iteration_E_table])
+        write_process.start()
+
+        worker_queue = mp.JoinableQueue() #queue of things to be calculated
         processes = [] # list of processes
 
-        for i in range(CPU_COUNT):
+        for i in range(CPU_COUNT - 1):
             p = ProcessHamiltonianCalc(worker_queue, writer_queue, shared_Jij_arr, shared_Jij_dim)
             processes.append(p)
             p.start()
 
         # Now generate jobs to put in the worker queue
 
-        for species in species_set:
+        for species in ["Escherichia coli (strain K12)"]:
             print(species)
             # get the indices in the alignment matrix of our sequences of interest
             first_alignment_indices = _get_index_for_species(
@@ -581,15 +597,17 @@ def best_pairing(first_monomer_info, second_monomer_info,
 
         print("waiting for workers")
         # put a termination signal for each processes in the worker queue
-        for i in range(CPU_COUNT):
+        for i in range(CPU_COUNT - 1):
             worker_queue.put(None)
 
         # make sure all worker processes are done
         worker_queue.join()
-
-
+        writer_queue.put(None)
 
         print("workers done")
+
+        print("waiting for write process")
+        write_process.join()
 
         # read in the energy dataframe and determine which pairs to take
         energy_df = pd.read_csv(
