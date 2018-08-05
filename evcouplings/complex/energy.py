@@ -26,7 +26,7 @@ from evcouplings.couplings.mapping import (
     Segment, SegmentIndexMapper
 )
 from evcouplings.complex.protocol import modify_complex_segments
-from evcouplings.couplings.protocol import mean_field
+from evcouplings.couplings.protocol import mean_field, standard, infer_plmc
 
 ID_THRESH = .8
 CPU_COUNT = 2
@@ -523,20 +523,41 @@ def best_pairing(first_monomer_info, second_monomer_info,
     current_kwargs["alignment_file"] = starting_aln_cfg["alignment_file"]
     current_kwargs = modify_complex_segments(current_kwargs, **current_kwargs)
 
-    for iteration in range(2):
+    ## TODO: this is terrible, don't do it
+    if kwargs["seed_alignment"] is not None:
+        current_kwargs["alignment_file"] = kwargs["seed_alignment"]
+
+    for iteration in range(N_pairing_iterations):
 
         ### Run the mean field
         print("iteration "+str(iteration))
-        # #run the mean field calculation on the alignment
-        # mean_field_outcfg = mean_field(**current_kwargs)
-        # outcfg["model_file_{}".format(iteration)] = mean_field_outcfg["model_file"]
-        # outcfg["raw_ec_file_{}".format(iteration)] = mean_field_outcfg["raw_ec_file"]
-        # outcfg["ec_file_{}".format(iteration)] = mean_field_outcfg["ec_file"]
 
-        # read in the parameters of mean field
-#        model = CouplingsModel(mean_field_outcfg["model_file"])
+        if kwargs["input_model_file"] is None:
 
-        model = CouplingsModel("/Users/AG/Dropbox/evcouplings_dev/pairing_by_E/complex_238_dist_paired/couplings/complex_238.model")
+            if kwargs["ec_calculation_method"] is "mean_field":
+                print("running mean field")
+                #run the mean field calculation on the alignment
+                temporary_outcfg = standard(**current_kwargs)
+
+            elif kwargs["ec_calculation_method"] is "plmc":
+                print("running plmc")
+                # run the plmc calculation on the alignment
+                temporary_outcfg, _, _ = infer_plmc(**current_kwargs)
+
+            else:
+                raise(ValueError, "ec calculation method provided is not implemented")
+
+            outcfg["model_file_{}".format(iteration)] = temporary_outcfg["model_file"]
+            outcfg["raw_ec_file_{}".format(iteration)] = temporary_outcfg["raw_ec_file"]
+            outcfg["ec_file_{}".format(iteration)] = temporary_outcfg["ec_file"]
+
+            # read in the parameters of mean field
+            model = CouplingsModel(temporary_outcfg["model_file"])
+
+        else:
+            model = CouplingsModel(kwargs["input_model_file"])
+
+
         shared_Jij_arr = mp.RawArray('d',model.J_ij.flatten())
         shared_Jij_dim = mp.RawArray(ctypes.c_int,np.array(model.J_ij.shape))
  
@@ -568,7 +589,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
 
         # Now generate jobs to put in the worker queue
 
-        for species in ["Escherichia coli (strain K12)"]:
+        for species in species_set:
             print(species)
             # get the indices in the alignment matrix of our sequences of interest
             first_alignment_indices = _get_index_for_species(

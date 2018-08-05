@@ -518,6 +518,8 @@ def statistical_energy(**kwargs):
             "first_segments", "second_segments",
             "first_identities_file", "second_identities_file",
             "first_annotation_file", "second_annotation_file",
+            "num_pairing_iterations", "pairs_per_iteration",
+            "ec_calculation_method"
         ]
     )
 
@@ -558,8 +560,8 @@ def statistical_energy(**kwargs):
     paired_ids, outcfg = best_pairing(
         first_monomer_info,
         second_monomer_info,
-        10,
-        100,
+        kwargs["num_pairing_iterations"],
+        kwargs["pairs_per_iteration"],
         **kwargs
         #kwargs["n_pairing_iterations"],
         #kwargs["n_increase_per_iteration"]
