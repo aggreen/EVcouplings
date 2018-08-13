@@ -26,7 +26,7 @@ from evcouplings.couplings.mapping import (
     Segment, SegmentIndexMapper
 )
 from evcouplings.complex.protocol import modify_complex_segments
-from evcouplings.couplings.protocol import mean_field, standard, infer_plmc
+from evcouplings.couplings.protocol import mean_field, standard, infer_plmc, complex
 
 ID_THRESH = .8
 CPU_COUNT = 2
@@ -108,83 +108,6 @@ def inter_energy_per_species(Jij, Jij_dim, species, sequences_X, sequences_Y,
     )
 
     return list_of_E
-
-#@numba.jit(nopython=True)
-def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positions_i, positions_j):
-    """
-    Calculates the Hamiltonian of the global probability distribution P(A_1, ..., A_L)
-    for a given sequence A_1,...,A_L from J_ij and h_i parameters
-
-    Parameters
-    ----------
-    sequences_X, sequences_Y : np.array
-        Sequence matrix for which Hamiltonians will be computed
-    J_ij: np.array
-        L x L x num_symbols x num_symbols J_ij pair coupling parameter matrix
-    positions: list of tuple of indices of J_ij matrix to sum
-
-    Returns
-    -------
-    np.array
-        Float matrix of size len(sequences_x) x len(sequences_y), where each position i,j corresponds
-        to the sum of Jijs between the given positions in sequences_X[i] and sequences_Y[j]
-    """
-
-    def ravel_idx(idx_tuple, array_shape):
-        current_num = 0
-        for idx, pos in enumerate(idx_tuple):
-            array_to_multiply = array_shape[idx + 1::]
-            product = 1
-            for i in array_to_multiply:
-                product = product * i
-            current_num += pos * product
-        return (int(current_num))
-
-    # iterate over sequences
-    N_x, L_x = sequences_X.shape
-    N_y, L_y = sequences_Y.shape
-
-    H = np.zeros((N_x, N_y))
-
-    for s_x in range(N_x):
-        A_x = sequences_X[s_x, :]
-
-        for s_y in range(N_y):
-            A_y = sequences_Y[s_y, :]
-
-            Jij_sum = 0.0
-
-            for ali_i, model_i in positions_i:
-
-                for ali_j, model_j in positions_j:
-
-
-                    if A_x[ali_i] == -1:
-                        continue
-                    else:
-                        i = A_x[ali_i]
-
-                    if A_y[ali_j] == -1:
-                        continue
-                    else:
-                        j = A_y[ali_j]
-
-                    current_num = 0
-
-                    for idx, pos in enumerate([model_i, model_j, i, j]):
-                        array_to_multiply = Jij_dim[idx + 1::]
-                        product = 1
-                        for ia in array_to_multiply:
-                            product = product * ia
-                        current_num += pos * product
-                    index = int(current_num)
-
-                    #print('indexing',model_i, model_j, ali_i, i, j)
-                    Jij_sum = Jij_sum + J_ij[index]
-
-            H[s_x, s_y] = Jij_sum
-
-    return H
 
 
 def initialize_alignment(first_monomer_info, second_monomer_info,
@@ -542,7 +465,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
             elif kwargs["ec_calculation_method"] is "plmc":
                 print("running plmc")
                 # run the plmc calculation on the alignment
-                temporary_outcfg, _, _ = infer_plmc(**current_kwargs)
+                temporary_outcfg = complex(**current_kwargs)
 
             else:
                 raise(ValueError, "ec calculation method provided is not implemented")
@@ -556,7 +479,8 @@ def best_pairing(first_monomer_info, second_monomer_info,
 
         else:
             model = CouplingsModel(kwargs["input_model_file"])
-
+        print(kwargs)
+        print(current_kwargs)
 
         shared_Jij_arr = mp.RawArray('d',model.J_ij.flatten())
         shared_Jij_dim = mp.RawArray(ctypes.c_int,np.array(model.J_ij.shape))
@@ -678,3 +602,81 @@ def best_pairing(first_monomer_info, second_monomer_info,
     # retun the paired ids and output configuration
     return current_id_pairs, outcfg
 
+
+@numba.jit(nopython=True)
+def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positions_i, positions_j):
+    """
+    Calculates the Hamiltonian of the global probability distribution P(A_1, ..., A_L)
+    for a given sequence A_1,...,A_L from J_ij and h_i parameters
+
+    Parameters
+    ----------
+    sequences_X, sequences_Y : np.array
+        Sequence matrix for which Hamiltonians will be computed
+    J_ij: np.array
+        L x L x num_symbols x num_symbols J_ij pair coupling parameter matrix
+    positions: list of tuple of indices of J_ij matrix to sum
+
+    Returns
+    -------
+    np.array
+        Float matrix of size len(sequences_x) x len(sequences_y), where each position i,j corresponds
+        to the sum of Jijs between the given positions in sequences_X[i] and sequences_Y[j]
+    """
+
+    def ravel_idx(idx_tuple, array_shape):
+        current_num = 0
+        for idx, pos in enumerate(idx_tuple):
+            array_to_multiply = array_shape[idx + 1::]
+            product = 1
+            for i in array_to_multiply:
+                product = product * i
+            current_num += pos * product
+        return (int(current_num))
+
+    # iterate over sequences
+    N_x, L_x = sequences_X.shape
+    N_y, L_y = sequences_Y.shape
+
+    H = np.zeros((N_x, N_y))
+
+    for s_x in range(N_x):
+        A_x = sequences_X[s_x, :]
+
+        for s_y in range(N_y):
+            A_y = sequences_Y[s_y, :]
+
+            Jij_sum = 0.0
+
+            for ali_i, model_i in positions_i:
+
+                for ali_j, model_j in positions_j:
+
+
+                    if A_x[ali_i] == -1:
+                        continue
+                    else:
+                        i = A_x[ali_i]
+
+                    if A_y[ali_j] == -1:
+                        continue
+                    else:
+                        j = A_y[ali_j]
+
+                    current_num = 0
+                    # converts the 2D index into a flat index
+                    for idx, pos in enumerate([model_i, model_j, i, j]):
+                        array_to_multiply = Jij_dim[idx + 1::]
+                        product = 1
+                        for ia in array_to_multiply:
+                            product = product * ia
+                        current_num += pos * product
+
+                    index = int(current_num)
+
+                    #print('indexing',model_i, model_j, ali_i, i, j)
+                    Jij_sum = Jij_sum + J_ij[index]
+
+            H[s_x, s_y] = Jij_sum
+
+    return H
