@@ -130,20 +130,21 @@ def describe_concatenation(annotation_file_1, annotation_file_2,
     )
     
     # If the user provided genome location files, calculate the number
-    # of ids for which we found an embl CDS
-    if genome_location_filename_1 is not None and \
-    genome_location_filename_2 is not None:
+    # of ids for which we found an embl CDS. Default value is np.nan
+    embl_cds1 = np.nan
+    embl_cds2 = np.nan
+
+    if (genome_location_filename_1 is not None and
+        genome_location_filename_2 is not None):
 
         genome_location_table_1 = pd.read_csv(genome_location_filename_1)
         genome_location_table_2 = pd.read_csv(genome_location_filename_2)
 
         # Number uniprot IDs with EMBL CDS that is not NA
-        embl_cds1 = len(list(set(genome_location_table_1.uniprot_ac)))
-        embl_cds2 = len(list(set(genome_location_table_2.uniprot_ac)))
-
-    else:
-        embl_cds1 = np.nan
-        embl_cds2 = np.nan
+        if "uniprot_ac" in genome_location_table_1.columns:
+            embl_cds1 = len(list(set(genome_location_table_1.uniprot_ac)))
+        if "uniprot_ac" in genome_location_table_2.columns:
+            embl_cds2 = len(list(set(genome_location_table_2.uniprot_ac)))
 
     concatenation_data = [
         num_seqs_1,
@@ -215,10 +216,13 @@ def genome_distance(**kwargs):
             "first_alignment_file", "second_alignment_file",
             "first_focus_sequence", "second_focus_sequence",
             "first_focus_mode", "second_focus_mode",
+            "first_region_start", "second_region_start",
             "first_segments", "second_segments",
             "genome_distance_threshold",
             "first_genome_location_file",
-            "second_genome_location_file"
+            "second_genome_location_file",
+            "first_annotation_file",
+            "second_annotation_file"
         ]
     )
 
@@ -264,8 +268,8 @@ def genome_distance(**kwargs):
     else:
         id_pairing = id_pairing_unfiltered
 
-    id_pairing.loc[:, "id_1"] = id_pairing["uniprot_id_1"]
-    id_pairing.loc[:, "id_2"] = id_pairing["uniprot_id_2"]
+    id_pairing.loc[:, "id_1"] = id_pairing.loc[:, "uniprot_id_1"]
+    id_pairing.loc[:, "id_2"] = id_pairing.loc[:, "uniprot_id_2"]
 
     # write concatenated alignment with distance filtering
     # TODO: save monomer alignments?
@@ -306,6 +310,8 @@ def genome_distance(**kwargs):
     #   sequence which will be passed into plmc with -f
     outcfg = aln_outcfg
     outcfg["raw_alignment_file"] = raw_alignment_file
+    outcfg["first_concatenated_monomer_alignment_file"] = mon_alignment_file_1
+    outcfg["second_concatenated_monomer_alignment_file"] = mon_alignment_file_2
     outcfg["focus_sequence"] = target_seq_id
 
     # Update the segments
@@ -391,7 +397,7 @@ def best_hit(**kwargs):
 
         if use_best_reciprocal:
             paralogs = find_paralogs(
-                target_sequence, most_similar_in_species,
+                target_sequence, annotation_table, similarities,
                 identity_threshold
             )
 
@@ -467,6 +473,8 @@ def best_hit(**kwargs):
     #   sequence which will be passed into plmc with -f
     outcfg = aln_outcfg
     outcfg["raw_alignment_file"] = raw_alignment_file
+    outcfg["first_concatenated_monomer_alignment_file"] = mon_alignment_file_1
+    outcfg["second_concatenated_monomer_alignment_file"] = mon_alignment_file_2
     outcfg["focus_sequence"] = target_seq_id
 
     # Update the segments

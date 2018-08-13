@@ -22,6 +22,7 @@ from evcouplings.utils.config import (
 from evcouplings.utils.system import (
     create_prefix_folders, insert_dir, verify_resources,
 )
+from evcouplings.couplings import Segment
 from evcouplings.compare.pdb import load_structures
 from evcouplings.compare.distances import (
     intra_dists, multimer_dists, remap_chains,
@@ -63,10 +64,11 @@ def _identify_structures(**kwargs):
             "max_num_hits", "max_num_structures",
             "pdb_mmtf_dir",
             "sifts_mapping_table", "sifts_sequence_db",
-            "by_alignment", "alignment_min_overlap",
+            "by_alignment", "pdb_alignment_method",
+            "alignment_min_overlap",
             "sequence_id", "sequence_file", "region",
             "use_bitscores", "domain_threshold",
-            "sequence_threshold", "jackhmmer",
+            "sequence_threshold"
         ]
     )
     # get SIFTS mapping object/sequence DB
@@ -81,6 +83,19 @@ def _identify_structures(**kwargs):
     # by sequence search or just fetching
     # based on Uniprot/PDB identifier
     if kwargs["by_alignment"]:
+
+        # if searching by alignment, verify that
+        # user selected jackhmmer or hmmsearch
+        SEARCH_METHODS = ["jackhmmer", "hmmsearch"]
+
+        if kwargs["pdb_alignment_method"] not in SEARCH_METHODS:
+            raise InvalidParameterError(
+                "Invalid pdb search method: " +
+                "{}. Valid selections are: {}".format(
+                    ", ".join(SEARCH_METHODS.keys())
+                )
+            )
+
         sifts_map = s.by_alignment(
             reduce_chains=reduce_chains,
             min_overlap=kwargs["alignment_min_overlap"],
@@ -650,10 +665,9 @@ def complex(**kwargs):
             "prefix", "ec_file", "min_sequence_distance",
             "pdb_mmtf_dir", "atom_filter",
             "first_compare_multimer", "second_compare_multimer",
-            "distance_cutoff",
+            "distance_cutoff", "segments",
             "first_sequence_id", "second_sequence_id",
             "first_sequence_file", "second_sequence_file",
-            "first_segments", "second_segments",
             "first_target_sequence_file", "second_target_sequence_file",
             "scale_sizes"
         ]
@@ -665,7 +679,7 @@ def complex(**kwargs):
         # initialize output EC files
         "ec_compared_all_file": prefix + "_CouplingScoresCompared_all.csv",
         "ec_compared_longrange_file": prefix + "_CouplingScoresCompared_longrange.csv",
-        "ec_compared_inter_file": prefix + "_CouplingsScoresCompared_inter.csv",
+        "ec_compared_inter_file": prefix + "_CouplingScoresCompared_inter.csv",
 
         # initialize output inter distancemap files
         "distmap_inter": prefix + "_distmap_inter",
@@ -699,8 +713,16 @@ def complex(**kwargs):
     aux_prefix = insert_dir(prefix, "aux", rootname_subdir=False)
     create_prefix_folders(aux_prefix)
 
+    # store auxiliary files here (too much for average user)
+    first_aux_prefix = insert_dir(aux_prefix, "first_monomer", rootname_subdir=False)
+    create_prefix_folders(first_aux_prefix)
+
+    # store auxiliary files here (too much for average user)
+    second_aux_prefix = insert_dir(aux_prefix, "second_monomer", rootname_subdir=False)
+    create_prefix_folders(second_aux_prefix)
+
     # Step 1: Identify 3D structures for comparison
-    def _identify_monomer_structures(name_prefix, outcfg):
+    def _identify_monomer_structures(name_prefix, outcfg, aux_prefix):
         # create a dictionary with kwargs for just the current monomer
         # remove the "prefix" kwargs so that we can replace with the 
         # aux prefix when calling _identify_structures
@@ -708,6 +730,10 @@ def complex(**kwargs):
         monomer_kwargs = {
             k.replace(name_prefix + "_", "", 1): v for k, v in kwargs.items() if "prefix" not in k
         }
+
+        # this field needs to be set explicitly else it gets overwritten by concatenated file
+        monomer_kwargs["alignment_file"] = kwargs[name_prefix + "_alignment_file"]
+        monomer_kwargs["raw_focus_alignment_file"] = kwargs[name_prefix + "_raw_focus_alignment_file"]
 
         # identify structures for that monomer
         sifts_map, sifts_map_full = _identify_structures(
@@ -726,8 +752,8 @@ def complex(**kwargs):
         )
         return outcfg, sifts_map
 
-    outcfg, first_sifts_map = _identify_monomer_structures("first", outcfg)
-    outcfg, second_sifts_map = _identify_monomer_structures("second", outcfg)
+    outcfg, first_sifts_map = _identify_monomer_structures("first", outcfg, first_aux_prefix)
+    outcfg, second_sifts_map = _identify_monomer_structures("second", outcfg, second_aux_prefix)
 
     # get the segment names from the kwargs
     segment_list = kwargs["segments"]
@@ -738,8 +764,11 @@ def complex(**kwargs):
             "Compare stage for protein complexes requires exactly two segments"
         )
 
-    first_segment_name = kwargs["segments"][0][0]
-    second_segment_name = kwargs["segments"][1][0]
+    first_segment_name = Segment.from_list(kwargs["segments"][0]).segment_id
+    second_segment_name = Segment.from_list(kwargs["segments"][1]).segment_id
+
+    first_chain_name = Segment.from_list(kwargs["segments"][0]).default_chain_name()
+    second_chain_name = Segment.from_list(kwargs["segments"][1]).default_chain_name()
 
     # Step 2: Compute distance maps
     def _compute_monomer_distance_maps(sifts_map, name_prefix, chain_name):
@@ -832,8 +861,12 @@ def complex(**kwargs):
         raise_missing=False
     )
 
-    d_intra_i, d_multimer_i, seqmap_i = _compute_monomer_distance_maps(first_sifts_map, "first", "A")
-    d_intra_j, d_multimer_j, seqmap_j = _compute_monomer_distance_maps(second_sifts_map, "second", "B")
+    d_intra_i, d_multimer_i, seqmap_i = _compute_monomer_distance_maps(
+        first_sifts_map, "first", first_chain_name
+    )
+    d_intra_j, d_multimer_j, seqmap_j = _compute_monomer_distance_maps(
+        second_sifts_map, "second", second_chain_name
+    )
 
     # compute inter distance map if sifts map for each monomer exists
     if len(first_sifts_map.hits) > 0 and len(second_sifts_map.hits) > 0:
@@ -942,7 +975,10 @@ def complex(**kwargs):
             inter_ecs.iloc[:kwargs["plot_highest_count"], :],
             outcfg["ec_lines_compared_pml_file"],
             distance_cutoff=kwargs["distance_cutoff"],
-            chain={first_segment_name: "A", second_segment_name: "B"}
+            chain={
+                first_segment_name: first_chain_name,
+                second_segment_name: second_chain_name
+            }
         )
 
     # Remap the complex crystal structures, if available

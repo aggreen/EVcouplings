@@ -6,7 +6,6 @@ sequences and perform calculations using the model
 Authors:
   Thomas A. Hopf
 """
-
 from collections import Iterable
 from copy import deepcopy
 
@@ -19,7 +18,6 @@ import pandas as pd
 _SLICE = np.s_[:]
 HAMILTONIAN_COMPONENTS = [FULL, COUPLINGS, FIELDS] = [0, 1, 2]
 NUM_COMPONENTS = len(HAMILTONIAN_COMPONENTS)
-
 
 # Methods for fast calculations (moved outside of class for numba jit)
 
@@ -249,8 +247,6 @@ class CouplingsModel:
         ----------
         filename : str
             Binary Jij file containing model parameters from plmc software
-        alphabet : str
-            Symbols corresponding to model states (e.g. "-ACGT").
         precision : {"float32", "float64"}, default: "float32"
             Sets if input file has single (float32) or double precision (float64)
         }
@@ -262,6 +258,9 @@ class CouplingsModel:
             parameters used by this class. Users are responsible for supplying
             the missing values (e.g. regularization strength, alphabet or M_eff)
             manually via the respective member variables/properties.
+
+        TODO: constructor for CouplingsModel (and all the other subclasses)
+        should be able to take a filehandle so one can read them from arbitrary streams
         """
         if file_format == "plmc_v2":
             self.__read_plmc_v2(filename, precision)
@@ -378,6 +377,17 @@ class CouplingsModel:
                         count=1
                     )
                     self.J_ij[j, i] = self.J_ij[i, j].T
+
+            # if lambda_h is negative, the model was
+            # inferred using mean-field
+            if self.lambda_h < 0:
+                # cast model to mean field model
+                from evcouplings.couplings.mean_field import MeanFieldCouplingsModel
+                self.__class__ = MeanFieldCouplingsModel
+
+                # handle requirements specific to
+                # the mean-field couplings model
+                self.transform_from_plmc_model()
 
     def __read_plmc_v1(self, filename, precision, alphabet=None):
         """
@@ -865,13 +875,6 @@ class CouplingsModel:
         Estimate parameters of a single-site model using
         Gaussian prior/L2 regularization.
 
-        Parameters
-        ----------
-        N : float
-            Effective (reweighted) number of sequences
-        lambda_h : float
-            Strength of L2 regularization on h_i parameters
-
         Returns
         -------
         CouplingsModel
@@ -899,7 +902,7 @@ class CouplingsModel:
         h_i = np.zeros((self.L, self.num_symbols))
 
         for i in range(self.L):
-            x0 = np.zeros((self.num_symbols))
+            x0 = np.zeros(self.num_symbols)
             h_i[i] = fmin_bfgs(
                 _log_post, x0, _gradient,
                 args=(self.f_i[i], self.lambda_h, self.N_eff),
@@ -1185,7 +1188,7 @@ class CouplingsModel:
         """
         return self.__4d_access(self.double_mut_mat, i, j, A_i, A_j)
 
-    def to_file(self, out_file, precision="float32", file_format="plmc_v1"):
+    def to_file(self, out_file, precision="float32", file_format="plmc_v2"):
         """
         Writes the potentially modified model again to binary file
 
@@ -1193,6 +1196,11 @@ class CouplingsModel:
         ----------
         out_file: str
             A string specifying the path to a file
+        precision: {"float16", "float32", "float64"}, optional (default: "float32")
+            Numerical NumPy data type specifying the precision
+            used to write numerical values to file
+        file_format : {"plmc_v1", "plmc_v2"}, optional (default: "plmc_v2")
+            Available file formats
         """
         new = file_format.lower() == "plmc_v2"
         with open(out_file, "wb") as f:
@@ -1233,3 +1241,4 @@ class CouplingsModel:
                 for i in range(self.L - 1):
                     for j in range(i + 1, self.L):
                         self.J_ij[i, j].astype(precision).tofile(f)
+
