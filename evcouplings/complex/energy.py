@@ -424,7 +424,7 @@ def best_pairing(first_monomer_info, second_monomer_info,
     species_set = list(set(first_monomer_info.species.dropna()).intersection(
         set(second_monomer_info.species.dropna())
     ))
-
+    print(species_set)
     outcfg["species_union_list_file"] = aux_prefix + "_species_union.csv"
     with open(outcfg["species_union_list_file"], "w") as of:
         for idx, species in enumerate(species_set):
@@ -624,17 +624,7 @@ def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positio
         to the sum of Jijs between the given positions in sequences_X[i] and sequences_Y[j]
     """
 
-    def ravel_idx(idx_tuple, array_shape):
-        current_num = 0
-        for idx, pos in enumerate(idx_tuple):
-            array_to_multiply = array_shape[idx + 1::]
-            product = 1
-            for i in array_to_multiply:
-                product = product * i
-            current_num += pos * product
-        return (int(current_num))
 
-    # iterate over sequences
     N_x, L_x = sequences_X.shape
     N_y, L_y = sequences_Y.shape
 
@@ -664,7 +654,7 @@ def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positio
                         j = A_y[ali_j]
 
                     current_num = 0
-                    # converts the 2D index into a flat index
+
                     for idx, pos in enumerate([model_i, model_j, i, j]):
                         array_to_multiply = Jij_dim[idx + 1::]
                         product = 1
@@ -674,7 +664,6 @@ def inter_sequence_hamiltonians(sequences_X, sequences_Y, J_ij, Jij_dim, positio
 
                     index = int(current_num)
 
-                    #print('indexing',model_i, model_j, ali_i, i, j)
                     Jij_sum = Jij_sum + J_ij[index]
 
             H[s_x, s_y] = Jij_sum
