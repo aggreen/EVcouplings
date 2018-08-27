@@ -276,89 +276,89 @@ def run(**kwargs):
     verbose = kwargs.get("verbose", False)
     symlink = kwargs.get("symlink", False)
 
-    # # update SIFTS file
-    # if verbose:
-    #     print("Updating SIFTS")
-    #
-    # SIFTS_dir = os.path.abspath(kwargs.get("sifts", os.path.realpath(__file__)))
-    # # create directory if it does not exist
-    # # ignores if directory on the way already exist
-    # dir = Path(SIFTS_dir)
-    # dir.mkdir(parents=True, exist_ok=True)
-    # sifts = os.path.join(SIFTS_dir, SIFTS_SUFFIX)
-    # sifts_curr = os.path.join(SIFTS_dir, SIFTS_CURRENT)
-    # sifts_table = sifts.format(year=year, month=month, day=day, extension="csv")
-    # sifts_fasta = sifts.format(year=year, month=month, day=day, extension="fasta")
-    # s_new = SIFTS(sifts.format(year=year, month=month, day=day, extension="csv"))
-    # s_new.create_sequence_file(sifts.format(year=year, month=month, day=day, extension="fasta"))
-    #
-    # # set symlink to "<file>_current"
-    # if symlink:
-    #     symlink_force(sifts_table, sifts_curr.format(extension="csv"))
-    #     symlink_force(sifts_fasta, sifts_curr.format(extension="fasta"))
-    #
-    # # update uniref
-    # db_path = os.path.abspath(kwargs.get("db", os.path.realpath(__file__)))
-    # for db_type in ["uniprot", "uniref100", "uniref90" ]:
-    #
-    #     if verbose:
-    #         print("Updating", db_type)
-    #
-    #     # if not existent create folder db_path/db_type
-    #     db_full_path = os.path.join(db_path, db_type)
-    #     dir = Path(db_full_path)
-    #     dir.mkdir(parents=True, exist_ok=True)
-    #
-    #     if db_type == "uniprot":
-    #         # download Swiss and TrEMBL and concatinate both
-    #         out_path = os.path.join(db_full_path, DB_SUFFIX.format(type=db_type, year=year, month=month))
-    #         db_curr = os.path.join(db_full_path, DB_CURRENT.format(type=db_type))
-    #         for i, type_d in enumerate(["sprot", "trembl"]):
-    #             if i:
-    #                 file_url = UNIPROT_FILE.format(type=type_d)
-    #                 download_ftp_file(UNIPROT_URL, UNIPROT_CWD, file_url, out_path, gziped=True,
-    #                                   file_handling="ab", verbose=verbose)
-    #             else:
-    #                 file_url = UNIPROT_FILE.format(type=type_d)
-    #                 download_ftp_file(UNIPROT_URL, UNIPROT_CWD, file_url, out_path, gziped=True, verbose=verbose)
-    #     else:
-    #         # download uniref db
-    #         db_file = DB_FILE.format(type=db_type)
-    #         db_cwd = DB_CWD.format(type=db_type)
-    #         out_path = os.path.join(db_full_path, DB_SUFFIX.format(type=db_type, year=year, month=month))
-    #         db_curr = os.path.join(db_full_path, DB_CURRENT.format(type=db_type))
-    #         download_ftp_file(DB_URL, db_cwd, db_file, out_path, gziped=True, verbose=verbose)
-    #
-    #     if symlink:
-    #         symlink_force(out_path, db_curr)
+    # update SIFTS file
+    if verbose:
+        print("Updating SIFTS")
+    
+    SIFTS_dir = os.path.abspath(kwargs.get("sifts", os.path.realpath(__file__)))
+    # create directory if it does not exist
+    # ignores if directory on the way already exist
+    dir = Path(SIFTS_dir)
+    dir.mkdir(parents=True, exist_ok=True)
+    sifts = os.path.join(SIFTS_dir, SIFTS_SUFFIX)
+    sifts_curr = os.path.join(SIFTS_dir, SIFTS_CURRENT)
+    sifts_table = sifts.format(year=year, month=month, day=day, extension="csv")
+    sifts_fasta = sifts.format(year=year, month=month, day=day, extension="fasta")
+    s_new = SIFTS(sifts.format(year=year, month=month, day=day, extension="csv"))
+    s_new.create_sequence_file(sifts.format(year=year, month=month, day=day, extension="fasta"))
+    
+    # set symlink to "<file>_current"
+    if symlink:
+        symlink_force(sifts_table, sifts_curr.format(extension="csv"))
+        symlink_force(sifts_fasta, sifts_curr.format(extension="fasta"))
+    
+    # update uniref
+    db_path = os.path.abspath(kwargs.get("db", os.path.realpath(__file__)))
+    for db_type in ["uniprot", "uniref100", "uniref90" ]:
+    
+        if verbose:
+            print("Updating", db_type)
+    
+        # if not existent create folder db_path/db_type
+        db_full_path = os.path.join(db_path, db_type)
+        dir = Path(db_full_path)
+        dir.mkdir(parents=True, exist_ok=True)
+    
+        if db_type == "uniprot":
+            # download Swiss and TrEMBL and concatinate both
+            out_path = os.path.join(db_full_path, DB_SUFFIX.format(type=db_type, year=year, month=month))
+            db_curr = os.path.join(db_full_path, DB_CURRENT.format(type=db_type))
+            for i, type_d in enumerate(["sprot", "trembl"]):
+                if i:
+                    file_url = UNIPROT_FILE.format(type=type_d)
+                    download_ftp_file(UNIPROT_URL, UNIPROT_CWD, file_url, out_path, gziped=True,
+                                      file_handling="ab", verbose=verbose)
+                else:
+                    file_url = UNIPROT_FILE.format(type=type_d)
+                    download_ftp_file(UNIPROT_URL, UNIPROT_CWD, file_url, out_path, gziped=True, verbose=verbose)
+        else:
+            # download uniref db
+            db_file = DB_FILE.format(type=db_type)
+            db_cwd = DB_CWD.format(type=db_type)
+            out_path = os.path.join(db_full_path, DB_SUFFIX.format(type=db_type, year=year, month=month))
+            db_curr = os.path.join(db_full_path, DB_CURRENT.format(type=db_type))
+            download_ftp_file(DB_URL, db_cwd, db_file, out_path, gziped=True, verbose=verbose)
+    
+        if symlink:
+            symlink_force(out_path, db_curr)
 
     # update EVcomplex ENA mapping databases
-    # if verbose:
-    #     print("Updating Uniprot to ENA ID Mapping table")
-    #
-    # # download the ID mapping file (Uniprot to ENA)
-    #
-    # # temporary file to download
-    # idmapping_dir = os.path.abspath(kwargs.get("idmapping", os.path.realpath(__file__)))
-    # tf = tempfile.NamedTemporaryFile(delete=False, prefix=idmapping_dir)
-    # out_path = tf.name
-    #
-    # download_ftp_file(
-    #   UNIPROT_URL, UNIPROT_IDMAPPING_CWD, UNIPROT_IDMAPPING_FILE,
-    #   out_path, gziped=True, file_handling="wb", verbose=verbose
-    # )
-    #
-    # full_mapping_table = os.path.join(
-    #     idmapping_dir, UNIPROT_IDMAPPING_TABLE.format(year=year, month=month, day=day)
-    # )
-    #
-    # # parse into correct format
-    # print("beginning parsing")
-    # parse_uniprot_idmapping_table(
-    #     out_path,
-    #     full_mapping_table
-    # )
-    # os.unlink(out_path)
+    if verbose:
+        print("Updating Uniprot to ENA ID Mapping table")
+    
+    # download the ID mapping file (Uniprot to ENA)
+    
+    # temporary file to download
+    idmapping_dir = os.path.abspath(kwargs.get("idmapping", os.path.realpath(__file__)))
+    tf = tempfile.NamedTemporaryFile(delete=False, prefix=idmapping_dir)
+    out_path = tf.name
+    
+    download_ftp_file(
+      UNIPROT_URL, UNIPROT_IDMAPPING_CWD, UNIPROT_IDMAPPING_FILE,
+      out_path, gziped=True, file_handling="wb", verbose=verbose
+    )
+    
+    full_mapping_table = os.path.join(
+        idmapping_dir, UNIPROT_IDMAPPING_TABLE.format(year=year, month=month, day=day)
+    )
+    
+    # parse into correct format
+    print("beginning parsing")
+    parse_uniprot_idmapping_table(
+        out_path,
+        full_mapping_table
+    )
+    os.unlink(out_path)
 
     # download EMBL-ENA CDS data
     if verbose:
