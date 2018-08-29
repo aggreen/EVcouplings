@@ -210,13 +210,11 @@ def embl_mapping_by_directory(ftp_url, ftp_cwd, cds_output_path, cds_output_file
     verbose
     """
 
-    def _callback(_bar, out, decompressor, chunk):
+    def _callback(out, decompressor, chunk):
         if gziped:
             out.write(decompressor.decompress(chunk))
         else:
             out.write(chunk)
-        if verbose:
-            _bar += len(chunk)
 
     ftp = ftplib.FTP(ftp_url)
     ftp.login()
@@ -240,7 +238,7 @@ def embl_mapping_by_directory(ftp_url, ftp_cwd, cds_output_path, cds_output_file
             temp = tempfile.NamedTemporaryFile(prefix=cds_output_path + "/", delete=False)
             with open(temp.name, "wb") as ena_temp_file:
 
-                callback = partial(_callback, None, ena_temp_file, decompressor)
+                callback = partial(_callback, ena_temp_file, decompressor)
                 ftp.retrbinary("RETR {}".format(file_to_download), callback, blocksize=8192)
 
             # get the genome location information and uniprot mapping
