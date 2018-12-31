@@ -18,7 +18,7 @@ from evcouplings.utils.config import (
 from evcouplings.utils.system import (
     create_prefix_folders, verify_resources
 )
-from evcouplings.align.protocol import modify_alignment
+from evcouplings.align import modify_alignment, Alignment
 
 from evcouplings.complex.alignment import (
     write_concatenated_alignment, modify_complex_segments
@@ -542,7 +542,7 @@ def statistical_energy(**kwargs):
     # make sure output directory exists
     create_prefix_folders(prefix)
 
-    def _load_monomer_info(annotations_file, identities_file):
+    def _load_monomer_info(annotations_file, identities_file, alignment_file):
 
         # read in annotation to a file and rename the appropriate column
         annotation_table = read_species_annotation_table(annotations_file)
@@ -551,17 +551,26 @@ def statistical_energy(**kwargs):
         similarities = pd.read_csv(identities_file)
 
         monomer_info = annotation_table.merge(similarities,on='id')
+
+        # ensure that we only include ids actually found in the input alignment
+        with open(alignment_file) as inf:
+            aln = Alignment.from_file(inf)
+
+        monomer_info = monomer_info.query("id in @aln.ids")
+
         return monomer_info
 
     # prep those tuples
     first_monomer_info = _load_monomer_info(
         kwargs["first_annotation_file"],
-        kwargs["first_identities_file"]
+        kwargs["first_identities_file"],
+        kwargs["first_alignment_file"]
     )
 
     second_monomer_info = _load_monomer_info(
         kwargs["second_annotation_file"],
-        kwargs["second_identities_file"]
+        kwargs["second_identities_file"],
+        kwargs["second_alignment_file"]
     )
 
     # CALL YOUR FUNCTION
@@ -571,9 +580,6 @@ def statistical_energy(**kwargs):
         kwargs["num_pairing_iterations"],
         kwargs["pairs_per_iteration"],
         **kwargs
-        #kwargs["n_pairing_iterations"],
-        #kwargs["n_increase_per_iteration"]
-
     )
     # paired_ids must be a pd.DataFrame with columns: id_1 and id_2
     print("finished pairing the ids")
@@ -624,7 +630,7 @@ def statistical_energy(**kwargs):
     outcfg = modify_complex_segments(outcfg, **kwargs)
 
     # Describe the statistics of the concatenation
-    outcfg = _run_describe_concatenation(outcfg, **kwargs)
+   # outcfg = _run_describe_concatenation(outcfg, **kwargs)
 
     return outcfg
 
