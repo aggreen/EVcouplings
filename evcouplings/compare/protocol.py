@@ -76,7 +76,8 @@ X_STRUCAWARE = [
     "precision",
     "conservation_max",
     "intra_enrich_max",
-    "inter_relative_rank_longrange"
+    "inter_relative_rank_longrange",
+    "f_hydrophilicity"
 
 ]
 
@@ -114,6 +115,7 @@ def fit_model(calibration_ecs, model_file, X, column_name):
         return data
 
     X_var = subset_data[X]
+    print(X_var, X)
     predicted = logreg.predict_proba(X_var)[:,1]
 
     data.loc[subset_data.index, column_name] = predicted
@@ -185,7 +187,7 @@ def complex_probability(ecs, scoring_model, use_all_ecs=False,
         )
 
         ecs = pd.concat(
-            [intra_ecs, inter_ecs]
+            [intra_ecs, inter_ecs], sort=False
         ).sort_values(
             score, ascending=False
         )
@@ -475,7 +477,7 @@ def _make_complex_contact_maps(ec_table, d_intra_i, d_multimer_i,
         with misc.plot_context("Arial"):
             if kwargs["scale_sizes"]:
                 # to scale sizes, combine all ecs to rescale together
-                ecs = pd.concat([ecs_i, ecs_j, ecs_inter])
+                ecs = pd.concat([ecs_i, ecs_j, ecs_inter], sort=False)
                 ecs.loc[:, "size"] = ecs.cn.values / ecs.cn.max()
 
                 # split back into three separate DataFrames
@@ -1018,7 +1020,7 @@ def complex(**kwargs):
         lines_to_keep = sifts_map_full.hits.query("pdb_id in @inter_protein_sifts.hits.pdb_id").index
         sifts_map.hits = pd.concat([
             sifts_map.hits, sifts_map_full.hits.loc[lines_to_keep, :]
-        ]).drop_duplicates()
+        ], sort=False).drop_duplicates()
 
         # save selected PDB hits
         sifts_map.hits.to_csv(
@@ -1216,7 +1218,8 @@ def complex(**kwargs):
                 ecs_inter_compared,
                 ecs_intra_i_compared,
                 ecs_intra_j_compared
-            ])
+            ], sort=False
+            )
 
             # rename the precision column to "segmentwise_precision"
             # because we calculated precision for each segment independently
