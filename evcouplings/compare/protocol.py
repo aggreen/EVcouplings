@@ -115,7 +115,7 @@ def fit_model(calibration_ecs, model_file, X, column_name):
         return data
 
     X_var = subset_data[X]
-    print(X_var, X)
+
     predicted = logreg.predict_proba(X_var)[:,1]
 
     data.loc[subset_data.index, column_name] = predicted
@@ -187,7 +187,7 @@ def complex_probability(ecs, scoring_model, use_all_ecs=False,
         )
 
         ecs = pd.concat(
-            [intra_ecs, inter_ecs], sort=False
+            [intra_ecs, inter_ecs]
         ).sort_values(
             score, ascending=False
         )
@@ -477,7 +477,7 @@ def _make_complex_contact_maps(ec_table, d_intra_i, d_multimer_i,
         with misc.plot_context("Arial"):
             if kwargs["scale_sizes"]:
                 # to scale sizes, combine all ecs to rescale together
-                ecs = pd.concat([ecs_i, ecs_j, ecs_inter], sort=False)
+                ecs = pd.concat([ecs_i, ecs_j, ecs_inter])
                 ecs.loc[:, "size"] = ecs.cn.values / ecs.cn.max()
 
                 # split back into three separate DataFrames
@@ -1020,7 +1020,7 @@ def complex(**kwargs):
         lines_to_keep = sifts_map_full.hits.query("pdb_id in @inter_protein_sifts.hits.pdb_id").index
         sifts_map.hits = pd.concat([
             sifts_map.hits, sifts_map_full.hits.loc[lines_to_keep, :]
-        ], sort=False).drop_duplicates()
+        ]).drop_duplicates()
 
         # save selected PDB hits
         sifts_map.hits.to_csv(
@@ -1218,7 +1218,7 @@ def complex(**kwargs):
                 ecs_inter_compared,
                 ecs_intra_i_compared,
                 ecs_intra_j_compared
-            ], sort=False
+            ]
             )
 
             # rename the precision column to "segmentwise_precision"
@@ -1303,7 +1303,7 @@ def complex(**kwargs):
 
         #conservation
         frequency_file = prefix.replace("compare", "concatenate") + "_frequencies.csv"
-        print(frequency_file)
+
         d = pd.read_csv(frequency_file)
         d["j"] = d["i"]
         d["segment_j"] = d["segment_i"]
@@ -1362,15 +1362,15 @@ def complex(**kwargs):
         calibration_ecs = pd.read_csv(outcfg["calibration_file"],index_col=0)
         calibration_ecs = fit_model(calibration_ecs, kwargs["structurefree_model_file"], X_STRUCFREE, "residue_prediction_strucfree")
         calibration_ecs = fit_model(calibration_ecs, kwargs["structureaware_model_file"], X_STRUCAWARE, "residue_prediction_strucaware")
-        calibration_ecs = fit_complex_model(
-            calibration_ecs, kwargs["complex_model_file"], kwargs["complex_scaler_file"], "residue_prediction_strucfree"
-        )
+        # calibration_ecs = fit_complex_model(
+        #     calibration_ecs, kwargs["complex_strucfree_model_file"], kwargs["complex_strucfree_scaler_file"], "residue_prediction_strucfree"
+        # )
 
         outcfg["inter_ecs_model_prediction_file"] = prefix +"_CouplingScores_inter_prediction.csv"
         calibration_ecs[[
             "inter_relative_rank_longrange", "i", "A_i", "j", "A_j",
             "segment_i", "segment_j", "cn", "dist", "precision",  "residue_prediction_strucaware", "residue_prediction_strucfree",
-            "complex_pred","evcomplex_raw", "asa_i", "asa_j", "asa_min", "conservation_max",
+            "evcomplex_raw", "asa_i", "asa_j", "asa_min", "conservation_max",
             "enrichment_5", "enrichment_10", "f_hydrophilicity"
         ]].to_csv(outcfg["inter_ecs_model_prediction_file"])
 
@@ -1490,7 +1490,7 @@ def fast_complex(**kwargs):
 
         # conservation
         frequency_file = prefix.replace("compare", "concatenate") + "_frequencies.csv"
-        print(frequency_file)
+
         d = pd.read_csv(frequency_file)
         d["j"] = d["i"]
         d["segment_j"] = d["segment_i"]
