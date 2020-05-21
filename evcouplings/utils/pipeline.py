@@ -63,6 +63,10 @@ PIPELINES = {
         ("mutate", mt.run, None),
         ("fold", fd.run, None)
     ]
+    "structure_finder": [
+        ("align", ap.run, None),
+        ("compare", cm.run, None)
+    ],
 }
 
 # suffix of file containing final output configuration of pipeline
@@ -241,8 +245,8 @@ def create_archive(config, outcfg, output_file):
     Parameters
     ----------
     config : dict-like
-        Input configuration of job. Uses 
-        config["management"]["archive"] (list of key 
+        Input configuration of job. Uses
+        config["management"]["archive"] (list of key
         used to index outcfg) to determine
         which files should be added to archive
     outcfg : dict-like
@@ -284,13 +288,13 @@ def delete_outputs(config, outcfg):
     Parameters
     ----------
     config : dict-like
-        Input configuration of job. Uses 
-        config["management"]["delete"] (list of key 
+        Input configuration of job. Uses
+        config["management"]["delete"] (list of key
         used to index outcfg) to determine
         which files should be added to archive
     outcfg : dict-like
         Output configuration of job
-    
+
     Returns
     -------
     outcfg_cleaned : dict-like
@@ -336,7 +340,7 @@ def verify_prefix(verify_subdir=True, **config):
     Check if configuration contains a prefix,
     and that prefix is a valid directory we
     can write to on the filesystem
-    
+
     Parameters
     ----------
     verify_subdir : bool, optional (default: True)
@@ -345,7 +349,7 @@ def verify_prefix(verify_subdir=True, **config):
         app loop.
     **config
         Input configuration for pipeline
-        
+
     Returns
     -------
     prefix : str
@@ -479,7 +483,7 @@ def run(**kwargs):
     EVcouplings pipeline execution from a
     configuration file (single thread, no
     batch or environment configuration)
-    
+
     Parameters
     ----------
     kwargs

@@ -274,7 +274,7 @@ def _make_complex_contact_maps(ec_table, d_intra_i, d_multimer_i,
         Paths of generated contact map files
     """
 
-    def plot_complex_cm(ecs_i, ecs_j, ecs_inter, 
+    def plot_complex_cm(ecs_i, ecs_j, ecs_inter,
                         first_segment_name,
                         second_segment_name, output_file=None):
         """
@@ -299,7 +299,7 @@ def _make_complex_contact_maps(ec_table, d_intra_i, d_multimer_i,
                 if len(ecs_inter) == 0:
                     ecs_inter = None
 
-            # Currently, we require at least one of the monomer 
+            # Currently, we require at least one of the monomer
             # to have either ECs or distances in order to make a plot
             if ((ecs_i is None or ecs_i.empty) and d_intra_i is None and d_multimer_i is None) \
                     or ((ecs_j is None or ecs_j.empty) and d_intra_j is None and d_multimer_i is None):
@@ -325,7 +325,7 @@ def _make_complex_contact_maps(ec_table, d_intra_i, d_multimer_i,
             else:
                 ec_len = len(ecs_inter)
             plt.suptitle(
-                "{} inter-molecule evolutionary couplings".format(ec_len), 
+                "{} inter-molecule evolutionary couplings".format(ec_len),
                 fontsize=14
             )
 
@@ -725,7 +725,7 @@ def complex(**kwargs):
     # Step 1: Identify 3D structures for comparison
     def _identify_monomer_structures(name_prefix, outcfg, aux_prefix):
         # create a dictionary with kwargs for just the current monomer
-        # remove the "prefix" kwargs so that we can replace with the 
+        # remove the "prefix" kwargs so that we can replace with the
         # aux prefix when calling _identify_structures
         # only replace first occurrence of name_prefix
         monomer_kwargs = {
@@ -1005,13 +1005,153 @@ def complex(**kwargs):
     return outcfg
 
 
+def structure_finder(**kwargs):
+    """
+    Protocol:
+    Compare ECs for single proteins (or domains)
+    to 3D structure information
+
+    Parameters
+    ----------
+    Mandatory kwargs arguments:
+        See list below in code where calling check_required
+
+    Returns
+    -------
+    outcfg : dict
+        Output configuration of the pipeline, including
+        the following fields:
+
+    """
+    check_required(
+        kwargs,
+        [
+            "prefix",  "target_sequence_file",
+
+        ]
+    )
+
+    prefix = kwargs["prefix"]
+
+    outcfg = {
+
+    }
+
+
+    # make sure output directory exists
+    create_prefix_folders(prefix)
+
+    # store auxiliary files here (too much for average user)
+    aux_prefix = insert_dir(prefix, "aux", rootname_subdir=False)
+    create_prefix_folders(aux_prefix)
+
+    # Step 1: Identify 3D structures for comparison
+    sifts_map, sifts_map_full = _identify_structures(**{
+        **kwargs,
+        "prefix": aux_prefix,
+    })
+
+    # save selected PDB hits
+    sifts_map.hits.to_csv(
+        outcfg["pdb_structure_hits_file"], index=False
+    )
+
+    # also save full list of hits
+    sifts_map_full.hits.to_csv(
+        outcfg["pdb_structure_hits_unfiltered_file"], index=False
+    )
+
+    # Step 2: Compute distance maps
+
+    # load all structures at once
+    structures = load_structures(
+        sifts_map.hits.pdb_id,
+        kwargs["pdb_mmtf_dir"],
+        raise_missing=False
+    )
+
+    # compute distance maps and save
+    # (but only if we found some structure)
+    if len(sifts_map.hits) > 0:
+        d_intra = intra_dists(
+            sifts_map, structures, atom_filter=kwargs["atom_filter"],
+            output_prefix=aux_prefix + "_distmap_intra"
+        )
+        d_intra.to_file(outcfg["distmap_monomer"])
+
+        # save contacts to separate file
+        outcfg["monomer_contacts_file"] = prefix + "_contacts_monomer.csv"
+        d_intra.contacts(
+            kwargs["distance_cutoff"]
+        ).to_csv(
+            outcfg["monomer_contacts_file"], index=False
+        )
+
+        # compute multimer distances, if requested;
+        # note that d_multimer can be None if there
+        # are no structures with multiple chains
+        if kwargs["compare_multimer"]:
+            d_multimer = multimer_dists(
+                sifts_map, structures, atom_filter=kwargs["atom_filter"],
+                output_prefix=aux_prefix + "_distmap_multimer"
+            )
+        else:
+            d_multimer = None
+
+        # if we have a multimer contact mapin the end, save it
+        if d_multimer is not None:
+            d_multimer.to_file(outcfg["distmap_multimer"])
+            outcfg["multimer_contacts_file"] = prefix + "_contacts_multimer.csv"
+
+            # save contacts to separate file
+            d_multimer.contacts(
+                kwargs["distance_cutoff"]
+            ).to_csv(
+                outcfg["multimer_contacts_file"], index=False
+            )
+        else:
+            outcfg["distmap_multimer"] = None
+
+        # at this point, also create remapped structures (e.g. for
+        # later comparison of folding results)
+        verify_resources(
+            "Target sequence file does not exist",
+            kwargs["target_sequence_file"]
+        )
+
+        # create target sequence map for remapping structure
+        with open(kwargs["target_sequence_file"]) as f:
+            header, seq = next(read_fasta(f))
+
+        seq_id, seq_start, seq_end = parse_header(header)
+        seqmap = dict(zip(range(seq_start, seq_end + 1), seq))
+
+        # remap structures, swap mapping index and filename in
+        # dictionary so we have a list of files in the dict keys
+        outcfg["remapped_pdb_files"] = {
+            filename: mapping_index for mapping_index, filename in
+            remap_chains(sifts_map, aux_prefix, seqmap).items()
+        }
+    else:
+        # if no structures, can not compute distance maps
+        d_intra = None
+        d_multimer = None
+        outcfg["distmap_monomer"] = None
+        outcfg["distmap_multimer"] = None
+        outcfg["remapped_pdb_files"] = None
+
+    return outcfg
+
 # list of available EC comparison protocols
 PROTOCOLS = {
     # standard monomer comparison protocol
     "standard": standard,
 
     # comparison for protein complexes
-    "complex": complex
+    "complex": complex,
+
+    # Solely for finding structures, not comparing ECs
+    "structure_finder": structure_finder
 }
 
 
