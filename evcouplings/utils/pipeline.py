@@ -62,7 +62,7 @@ PIPELINES = {
         ("compare", cm.run, None),
         ("mutate", mt.run, None),
         ("fold", fd.run, None)
-    ]
+    ],
     "structure_finder": [
         ("align", ap.run, None),
         ("compare", cm.run, None)

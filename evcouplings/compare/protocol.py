@@ -1034,7 +1034,14 @@ def structure_finder(**kwargs):
     prefix = kwargs["prefix"]
 
     outcfg = {
-
+        "pdb_structure_hits_file": prefix + "_structure_hits.csv",
+        "pdb_structure_hits_unfiltered_file": prefix + "_structure_hits_unfiltered.csv",
+        # cannot have the distmap files end with "_file" because there are
+        # two files (.npy and .csv), which would cause problems with automatic
+        # checking if those files exist
+        "distmap_monomer": prefix + "_distance_map_monomer",
+        "distmap_multimer": prefix + "_distance_map_multimer",
+        "structure_statistics_file": prefix + "_structure_statistics.csv"
     }
 
 
@@ -1140,6 +1147,19 @@ def structure_finder(**kwargs):
         outcfg["distmap_multimer"] = None
         outcfg["remapped_pdb_files"] = None
 
+    # Make structure statistics output file
+    covered_residues = set()
+    for idx,row in sifts_map.hits.iterrows():
+        _covered = list(range(row.uniprot_start, row.uniprot_end))
+        covered_residues = covered_residues.union(set(_covered))
+
+    structure_statistics = pd.DataFrame({
+        "uid": kwargs["sequence_id"],
+        "num_hits": len(sifts_map.hits),
+        "num_hits_unfiltered": len(sifts_map_full.hits),
+        "percent_covered": len(list(covered_residues)) / int(kwargs["segments"][0][4])
+    }, index=[0])
+    structure_statistics.to_csv(outcfg["structure_statistics_file"])
     return outcfg
 
 # list of available EC comparison protocols

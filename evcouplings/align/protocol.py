@@ -46,7 +46,7 @@ def _verify_sequence_id(sequence_id):
     Verify if a target sequence identifier is in proper
     format for the pipeline to run without errors
     (not none, and contains no whitespace)
-        
+
     Parameters
     ----------
     id : str
@@ -78,8 +78,8 @@ def _verify_sequence_id(sequence_id):
 def _make_hmmsearch_raw_fasta(alignment_result, prefix):
     """
     HMMsearch results do not contain the query sequence
-    so we must construct a raw_fasta file with the query 
-    sequence as the first hit, to ensure proper numbering. 
+    so we must construct a raw_fasta file with the query
+    sequence as the first hit, to ensure proper numbering.
     The search result is filtered to only contain the columns with
     match states to the HMM, which has a one to one mapping to the
     query sequence.
@@ -108,7 +108,7 @@ def _make_hmmsearch_raw_fasta(alignment_result, prefix):
             i for i, x in enumerate(ali.annotation["GC"]["RF"]) if x == "x"
         ]
 
-        # ensure that the length of the match states 
+        # ensure that the length of the match states
         # match the length of the sequence
         if len(match_index) != query_sequence_ali.L:
             raise ValueError(
@@ -140,7 +140,7 @@ def _make_hmmsearch_raw_fasta(alignment_result, prefix):
     with open(alignment_result["target_sequence_file"]) as a:
         query_sequence_ali = Alignment.from_file(a, format="fasta")
 
-    # if the provided alignment is empty, just return the target sequence 
+    # if the provided alignment is empty, just return the target sequence
     raw_focus_alignment_file = prefix + "_raw.fasta"
     if not valid_file(alignment_result["raw_alignment_file"]):
         # write the query sequence to a fasta file
@@ -160,14 +160,14 @@ def _make_hmmsearch_raw_fasta(alignment_result, prefix):
             "Stockholm alignment {} missing RF"
             " annotation of match states".format(alignment_result["raw_alignment_file"])
         )
-            
+
     # add insertions to the query sequence in order to preserve correct
     # numbering of match sequences
     gapped_sequence_ali = _add_gaps_to_query(query_sequence_ali, ali)
 
-    # write a new alignment file with the query sequence as 
+    # write a new alignment file with the query sequence as
     # the first entry
-    
+
     with open(raw_focus_alignment_file, "w") as of:
         gapped_sequence_ali.write(of)
         ali.write(of)
@@ -1058,7 +1058,7 @@ def jackhmmer_search(**kwargs):
         kwargs["first_index"],
         target_sequence_file
     )
-
+    print("prepared for jackhmmer search")
     # run jackhmmer... allow to reuse pre-exisiting
     # Stockholm alignment file here
     ali_outcfg_file = prefix + ".align_jackhmmer_search.outcfg"
@@ -1077,13 +1077,14 @@ def jackhmmer_search(**kwargs):
     else:
         # otherwise, we have to run the alignment
         # modify search thresholds to be suitable for jackhmmer
+
         seq_threshold, domain_threshold = search_thresholds(
             kwargs["use_bitscores"],
             kwargs["sequence_threshold"],
             kwargs["domain_threshold"],
             len(cut_seq)
         )
-
+        print('prepared with threshold', seq_threshold, domain_threshold)
         # run search process
         ali = at.run_jackhmmer(
             query=target_sequence_file,
@@ -1099,7 +1100,7 @@ def jackhmmer_search(**kwargs):
             checkpoints_ali=kwargs["checkpoints_ali"],
             binary=kwargs["jackhmmer"],
         )
-
+        print('alignment completed')
         # get rid of huge stdout log file immediately
         # (do not use /dev/null option of jackhmmer function
         # to make no assumption about operating system)
@@ -1146,9 +1147,9 @@ def hmmbuild_and_search(**kwargs):
     """
     Protocol:
 
-    Build HMM from sequence alignment using hmmbuild and 
+    Build HMM from sequence alignment using hmmbuild and
     search against a sequence database using hmmsearch.
-    
+
     Parameters
     ----------
     Mandatory kwargs arguments:
@@ -1280,7 +1281,7 @@ def hmmbuild_and_search(**kwargs):
         return focus_fasta_file, target_sequence_file, region_start, region_end
 
 
-    # define the gap threshold for inclusion in HMM's build by HMMbuild. 
+    # define the gap threshold for inclusion in HMM's build by HMMbuild.
     SYMFRAC_HMMBUILD = 0.0
 
     # check for required options
@@ -1325,7 +1326,7 @@ def hmmbuild_and_search(**kwargs):
     else:
         # otherwise, we have to run the alignment
         # modify search thresholds to be suitable for hmmsearch
-        sequence_length = region_end - region_start + 1 
+        sequence_length = region_end - region_start + 1
         seq_threshold, domain_threshold = search_thresholds(
             kwargs["use_bitscores"],
             kwargs["sequence_threshold"],
@@ -1353,7 +1354,7 @@ def hmmbuild_and_search(**kwargs):
             seq_threshold=seq_threshold,
             nobias=kwargs["nobias"],
             cpu=kwargs["cpu"],
-            binary=kwargs["hmmsearch"], 
+            binary=kwargs["hmmsearch"],
         )
 
         # get rid of huge stdout log file immediately
@@ -1382,7 +1383,7 @@ def hmmbuild_and_search(**kwargs):
         "hittable_file": ali["domtblout"],
     }
 
-    # convert the raw output alignment to fasta format 
+    # convert the raw output alignment to fasta format
     # and add the appropriate query sequecne
     raw_focus_alignment_file = _make_hmmsearch_raw_fasta(outcfg, prefix)
     outcfg["raw_focus_alignment_file"] =  raw_focus_alignment_file
@@ -1458,6 +1459,7 @@ def standard(**kwargs):
     # first step of protocol is to get alignment using
     # jackhmmer; initialize output configuration with
     # results of this search
+    print("preparing jackhmmer search")
     jackhmmer_outcfg = jackhmmer_search(**kwargs)
     stockholm_file = jackhmmer_outcfg["raw_alignment_file"]
 
@@ -1465,7 +1467,7 @@ def standard(**kwargs):
     target_seq_id = segment.sequence_id
     region_start = segment.region_start
     region_end = segment.region_end
-
+    print('reading stockholm')
     # read in stockholm format (with full annotation)
     with open(stockholm_file) as a:
         ali_raw = Alignment.from_file(a, "stockholm")
@@ -1478,7 +1480,7 @@ def standard(**kwargs):
     with open(ali_raw_fasta_file, "w") as f:
         ali_raw.write(f, "fasta")
     """
-
+    print('extracting annotation')
     # save annotation in sequence headers (species etc.)
     if kwargs["extract_annotation"]:
         annotation_file = prefix + "_annotation.csv"
@@ -1488,7 +1490,7 @@ def standard(**kwargs):
     # center alignment around focus/search sequence
     focus_cols = np.array([c != "-" for c in ali_raw[0]])
     focus_ali = ali_raw.select(columns=focus_cols)
-
+    print('modifying alignment')
     target_seq_index = 0
     mod_outcfg, ali = modify_alignment(
         focus_ali, target_seq_index, target_seq_id, region_start, **kwargs
