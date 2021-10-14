@@ -1462,7 +1462,7 @@ def standard(**kwargs):
     print("preparing jackhmmer search")
     jackhmmer_outcfg = jackhmmer_search(**kwargs)
     stockholm_file = jackhmmer_outcfg["raw_alignment_file"]
-
+    annotation_file = prefix + "_annotation.csv"
     segment = Segment.from_list(jackhmmer_outcfg["segments"][0])
     target_seq_id = segment.sequence_id
     region_start = segment.region_start
@@ -1483,7 +1483,7 @@ def standard(**kwargs):
     print('extracting annotation')
     # save annotation in sequence headers (species etc.)
     if kwargs["extract_annotation"]:
-        annotation_file = prefix + "_annotation.csv"
+
         annotation = extract_header_annotation(ali_raw)
         annotation.to_csv(annotation_file, index=False)
 
@@ -1500,7 +1500,7 @@ def standard(**kwargs):
     outcfg = {
         **jackhmmer_outcfg,
         **mod_outcfg,
-        "annotation_file": annotation_file
+#        "annotation_file": annotation_file
     }
 
     # dump output config to YAML file for debugging/logging

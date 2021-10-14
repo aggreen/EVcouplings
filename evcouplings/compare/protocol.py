@@ -1157,7 +1157,7 @@ def structure_finder(**kwargs):
         "uid": kwargs["sequence_id"],
         "num_hits": len(sifts_map.hits),
         "num_hits_unfiltered": len(sifts_map_full.hits),
-        "percent_covered": len(list(covered_residues)) / int(kwargs["segments"][0][4])
+        "num_residues_covered": len(list(covered_residues))
     }, index=[0])
     structure_statistics.to_csv(outcfg["structure_statistics_file"])
     return outcfg
