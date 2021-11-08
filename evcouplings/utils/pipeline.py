@@ -207,7 +207,7 @@ def execute(**config):
             # verify all the output files are there
             outfiles = [
                 filepath for f, filepath in outcfg.items()
-                if f.endswith("_file") and filepath is not None
+                if f.endswith("_file") and filepath is not None and not filepath.endswith("tblout") and not filepath.endswith("sto") and not filepath.endswith("raw_focus.fasta")
             ]
 
             verify_resources(

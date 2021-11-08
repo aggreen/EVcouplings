@@ -743,6 +743,7 @@ def intra_dists(sifts_result, structures=None, atom_filter=None,
     ResourceError
         If any structure could not be loaded and raise_missing is True
     """
+    print("Computing intra dists")
     if len(sifts_result.hits) == 0:
         raise ValueError(
             "sifts_result is empty (no structure hits, but at least one required)"
@@ -762,8 +763,9 @@ def intra_dists(sifts_result, structures=None, atom_filter=None,
 
     # compute individual distance maps and aggregate
     for i, r in sifts_result.hits.iterrows():
+
         # skip missing structures
-        if not raise_missing and r["pdb_id"] not in structures:
+        if not raise_missing and not r["pdb_id"]in list(structures.keys()):
             continue
 
         # extract and remap PDB chain
@@ -1066,9 +1068,9 @@ def inter_dists(sifts_result_i, sifts_result_j, structures=None,
 def _remap_sequence(chain, sequence):
     """
     Changes the residue names in an input
-    PDB chain to the given sequence (both one 
+    PDB chain to the given sequence (both one
     letter and three letter codes).
-    
+
     Parameters
     ----------
     chain : Chain
@@ -1079,7 +1081,7 @@ def _remap_sequence(chain, sequence):
         residues in this mapping (without any changes
         what the residues actually are in the structure in terms
         of atoms)
-    
+
     Returns
     -------
     Chain
@@ -1111,10 +1113,10 @@ def remap_chains(sifts_result, output_prefix, sequence=None,
     Remap a set of PDB chains into the numbering scheme (and
     amino acid sequence) of a target sequence (a.k.a. the poorest
     homology model possible).
-    
+
     (This function is placed here because of close relationship
     to intra_dists and reusing functionality for it).
-    
+
     Parameters
     ----------
     sifts_result : SIFTSResult
@@ -1124,7 +1126,7 @@ def remap_chains(sifts_result, output_prefix, sequence=None,
         Save remapped structures to files prefixed with this string
     sequence : dict, optional (default: None)
         Mapping from sequence position (int or str) to residue.
-        If this parameter is given, residues in the output 
+        If this parameter is given, residues in the output
         structures will be renamed to the residues in this
         mapping.
 
@@ -1153,7 +1155,7 @@ def remap_chains(sifts_result, output_prefix, sequence=None,
         Index of model in PDB structure that should be used
     chain_name : str, optional (default: "A")
         Rename the PDB chain to this when saving the file. This
-        will not affect the file name, only the name of the chain in 
+        will not affect the file name, only the name of the chain in
         the PDB object.
     raise_missing : bool, optional (default: True)
         Raise a ResourceError if any of the input structures can
@@ -1245,7 +1247,7 @@ def remap_complex_chains(sifts_result_i, sifts_result_j,
     sequence_i : dict, optional (default: None)
         Mapping from sequence position (int or str) in the
         first sequence to residue.
-        If this parameter is given, residues in the output 
+        If this parameter is given, residues in the output
         structures will be renamed to the residues in this
         mapping.
 

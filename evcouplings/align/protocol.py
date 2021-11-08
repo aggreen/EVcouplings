@@ -1302,6 +1302,8 @@ def hmmbuild_and_search(**kwargs):
     # make sure output directory exists
     create_prefix_folders(prefix)
 
+    print("running hmmbuild on alignment", kwargs["alignment_file"])
+
     # prepare input alignment for hmmbuild
     focus_fasta_file, target_sequence_file, region_start, region_end = \
         _format_alignment_for_hmmbuild(

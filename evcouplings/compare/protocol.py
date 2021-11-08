@@ -1080,9 +1080,10 @@ def structure_finder(**kwargs):
     # compute distance maps and save
     # (but only if we found some structure)
     if len(sifts_map.hits) > 0:
+        print("calling intra dist function")
         d_intra = intra_dists(
             sifts_map, structures, atom_filter=kwargs["atom_filter"],
-            output_prefix=aux_prefix + "_distmap_intra"
+            output_prefix=aux_prefix + "_distmap_intra", raise_missing=False
         )
         d_intra.to_file(outcfg["distmap_monomer"])
 
@@ -1100,7 +1101,7 @@ def structure_finder(**kwargs):
         if kwargs["compare_multimer"]:
             d_multimer = multimer_dists(
                 sifts_map, structures, atom_filter=kwargs["atom_filter"],
-                output_prefix=aux_prefix + "_distmap_multimer"
+                output_prefix=aux_prefix + "_distmap_multimer", raise_missing=False
             )
         else:
             d_multimer = None
@@ -1137,7 +1138,7 @@ def structure_finder(**kwargs):
         # dictionary so we have a list of files in the dict keys
         outcfg["remapped_pdb_files"] = {
             filename: mapping_index for mapping_index, filename in
-            remap_chains(sifts_map, aux_prefix, seqmap).items()
+            remap_chains(sifts_map, aux_prefix, seqmap, raise_missing=False).items()
         }
     else:
         # if no structures, can not compute distance maps
