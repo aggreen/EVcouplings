@@ -1138,7 +1138,10 @@ def structure_finder(**kwargs):
         # dictionary so we have a list of files in the dict keys
         outcfg["remapped_pdb_files"] = {
             filename: mapping_index for mapping_index, filename in
-            remap_chains(sifts_map, aux_prefix, seqmap, raise_missing=False).items()
+            remap_chains(
+                sifts_map, aux_prefix, atom_filter=None,
+                sequence=None, raise_missing=False
+            ).items()
         }
     else:
         # if no structures, can not compute distance maps
